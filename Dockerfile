@@ -1,8 +1,8 @@
 FROM python:3.11-slim
 
-# FFmpeg 설치
+# FFmpeg + 한국어 폰트 설치 (drawtext 필터용)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ffmpeg && \
+    apt-get install -y --no-install-recommends ffmpeg fonts-noto-cjk && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

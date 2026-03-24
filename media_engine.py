@@ -23,6 +23,34 @@ MEDIA_DIR = os.path.join(os.path.dirname(__file__), "media")
 os.makedirs(MEDIA_DIR, exist_ok=True)
 
 
+# ─── 한국어 폰트 감지 (FFmpeg drawtext용) ───
+_FONT_PATH_CACHE = None
+
+def _get_cjk_font():
+    """한국어 지원 폰트 경로 반환 (캐싱)"""
+    global _FONT_PATH_CACHE
+    if _FONT_PATH_CACHE is not None:
+        return _FONT_PATH_CACHE
+    candidates = [
+        "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+        "/usr/share/fonts/opentype/noto/NotoSansCJKkr-Regular.otf",
+        "/usr/share/fonts/truetype/noto/NotoSansCJKkr-Regular.otf",
+        "/usr/share/fonts/truetype/nanum/NanumGothic.ttf",
+    ]
+    for fp in candidates:
+        if os.path.exists(fp):
+            _FONT_PATH_CACHE = fp
+            return fp
+    _FONT_PATH_CACHE = ""
+    return ""
+
+def _drawtext_font_opt():
+    """drawtext 필터용 fontfile 옵션 문자열 반환"""
+    fp = _get_cjk_font()
+    return f":fontfile='{fp}'" if fp else ""
+
+
 # ═══════════════════════════════════════════
 # TTS Engine (ElevenLabs)
 # ═══════════════════════════════════════════
@@ -252,7 +280,7 @@ def _gen_image_placeholder(prompt: str, output_path: str,
             "-f", "lavfi",
             "-i", f"color=c=0x1a1a28:s={width}x{height}:d=1",
             "-vf", f"drawtext=text='{short}':fontsize=36:fontcolor=white:"
-                   f"x=(w-text_w)/2:y=(h-text_h)/2:font=Mono",
+                   f"x=(w-text_w)/2:y=(h-text_h)/2{_drawtext_font_opt()}",
             "-frames:v", "1",
             output_path
         ], capture_output=True, timeout=10)
@@ -469,7 +497,7 @@ class ReelsCompositor:
                     vf_parts.append(
                         f"drawtext=text='{text_clean}':fontsize={fontsize}:"
                         f"fontcolor=white:borderw=3:bordercolor=black:"
-                        f"x=(w-text_w)/2:y=(h-text_h)/2"
+                        f"x=(w-text_w)/2:y=(h-text_h)/2{_drawtext_font_opt()}"
                     )
 
                 cmd += [
@@ -592,7 +620,7 @@ def _gen_card_placeholder(slide: dict, output_path: str, idx: int) -> dict:
             "-i", "color=c=0x1a1a28:s=1080x1080:d=1",
             "-vf", f"drawtext=text='{text_clean}':fontsize=48:"
                    f"fontcolor=white:borderw=2:bordercolor=black:"
-                   f"x=(w-text_w)/2:y=(h-text_h)/2",
+                   f"x=(w-text_w)/2:y=(h-text_h)/2{_drawtext_font_opt()}",
             "-frames:v", "1",
             output_path
         ], capture_output=True, timeout=10)
@@ -609,11 +637,37 @@ def _gen_card_placeholder(slide: dict, output_path: str, idx: int) -> dict:
 # Pipeline Orchestrator
 # ═══════════════════════════════════════════
 
+def _resolve_api_keys(api_keys: dict) -> dict:
+    """프론트엔드 API 키 + 서버 환경변수 병합. 프론트 입력이 비어있으면 환경변수 사용."""
+    keys = dict(api_keys or {})
+
+    # 프론트 입력이 빈 문자열이면 환경변수로 대체
+    if not keys.get("elevenlabs"):
+        keys["elevenlabs"] = os.environ.get("ELEVENLABS_API_KEY", "")
+    if not keys.get("together"):
+        keys["together"] = os.environ.get("TOGETHER_API_KEY", "")
+    if not keys.get("openai"):
+        keys["openai"] = os.environ.get("OPENAI_API_KEY", "")
+    if not keys.get("minimax"):
+        keys["minimax"] = os.environ.get("MINIMAX_API_KEY", "")
+
+    # image_provider 자동 감지: 프론트에서 placeholder로 왔어도 서버에 키가 있으면 사용
+    if keys.get("image_provider") in (None, "", "placeholder"):
+        if keys.get("together"):
+            keys["image_provider"] = "together"
+        elif keys.get("openai"):
+            keys["image_provider"] = "openai"
+        else:
+            keys["image_provider"] = "placeholder"
+
+    return keys
+
+
 def run_media_pipeline(plan_id: int, content_type: str,
                        scenes: list, api_keys: dict = None) -> dict:
     """전체 미디어 파이프라인 실행"""
 
-    keys = api_keys or {}
+    keys = _resolve_api_keys(api_keys)
     output_dir = os.path.join(MEDIA_DIR, f"plan_{plan_id}")
     os.makedirs(output_dir, exist_ok=True)
 
