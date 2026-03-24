@@ -348,12 +348,14 @@ async def delete_plan(plan_id: int):
 # ─── Scenes ───
 @app.post("/api/plans/{plan_id}/scenes")
 async def add_scene(plan_id: int, scene: SceneCreate):
+    VALID_SCENE_TYPES = {'hook', 'normal', 'result', 'cta', 'cover', 'comparison', 'quiz', 'poll', 'alert'}
     conn = get_db()
     c = conn.cursor()
+    scene_type = scene.scene_type if scene.scene_type in VALID_SCENE_TYPES else "normal"
     c.execute("""
         INSERT INTO script_scenes (plan_id, scene_order, scene_type, duration_sec, narration, visual_desc, text_overlay)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, (plan_id, scene.scene_order, scene.scene_type, scene.duration_sec,
+    """, (plan_id, scene.scene_order, scene_type, scene.duration_sec,
           scene.narration, scene.visual_desc, scene.text_overlay))
     conn.commit()
     conn.close()
@@ -362,12 +364,14 @@ async def add_scene(plan_id: int, scene: SceneCreate):
 
 @app.put("/api/scenes/{scene_id}")
 async def update_scene(scene_id: int, scene: SceneCreate):
+    VALID_SCENE_TYPES = {'hook', 'normal', 'result', 'cta', 'cover', 'comparison', 'quiz', 'poll', 'alert'}
     conn = get_db()
     c = conn.cursor()
+    scene_type = scene.scene_type if scene.scene_type in VALID_SCENE_TYPES else "normal"
     c.execute("""
         UPDATE script_scenes SET scene_order=?, scene_type=?, duration_sec=?,
         narration=?, visual_desc=?, text_overlay=? WHERE id=?
-    """, (scene.scene_order, scene.scene_type, scene.duration_sec,
+    """, (scene.scene_order, scene_type, scene.duration_sec,
           scene.narration, scene.visual_desc, scene.text_overlay, scene_id))
     conn.commit()
     conn.close()
@@ -435,17 +439,22 @@ async def generate_script(req: GenerateScriptRequest):
             "text_overlay": result.get("main_text", "")
         }]
 
+    # 허용된 scene_type 목록 (DB CHECK constraint와 동기화)
+    VALID_SCENE_TYPES = {'hook', 'normal', 'result', 'cta', 'cover', 'comparison', 'quiz', 'poll', 'alert'}
+
     if scenes:
         # 기존 씬 삭제
         c.execute("DELETE FROM script_scenes WHERE plan_id = ?", (req.plan_id,))
         for s in scenes:
+            raw_type = s.get("scene_type", "normal")
+            scene_type = raw_type if raw_type in VALID_SCENE_TYPES else "normal"
             c.execute("""
                 INSERT INTO script_scenes (plan_id, scene_order, scene_type, duration_sec, narration, visual_desc, text_overlay)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """, (
                 req.plan_id,
                 s.get("scene_order", 0),
-                s.get("scene_type", "normal"),
+                scene_type,
                 float(s.get("duration_sec", 2.0)),
                 s.get("narration"),
                 s.get("visual_desc"),
@@ -494,12 +503,14 @@ async def bulk_update_scenes(plan_id: int, data: SceneBulkUpdate):
         raise HTTPException(404, "Plan not found")
 
     # 기존 씬 삭제 후 재생성
+    VALID_SCENE_TYPES = {'hook', 'normal', 'result', 'cta', 'cover', 'comparison', 'quiz', 'poll', 'alert'}
     c.execute("DELETE FROM script_scenes WHERE plan_id = ?", (plan_id,))
     for s in data.scenes:
+        scene_type = s.scene_type if s.scene_type in VALID_SCENE_TYPES else "normal"
         c.execute("""
             INSERT INTO script_scenes (plan_id, scene_order, scene_type, duration_sec, narration, visual_desc, text_overlay)
             VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (plan_id, s.scene_order, s.scene_type, s.duration_sec,
+        """, (plan_id, s.scene_order, scene_type, s.duration_sec,
               s.narration, s.visual_desc, s.text_overlay))
 
     # updated_at 갱신
