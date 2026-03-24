@@ -201,6 +201,7 @@ async function loadIdeas(page = 1) {
 }
 
 function videoCardHTML(v) {
+  const hasTranscript = v.transcript && v.transcript.length > 0;
   return `
     <div class="video-card">
       <div class="vc-body">
@@ -210,8 +211,10 @@ function videoCardHTML(v) {
           <span class="vc-topic">${v.topic}</span>
           <span class="vc-duration">⏱ ${v.duration}</span>
           ${v.plan_count > 0 ? `<span class="vc-planned">✅ ${v.plan_count}개 기획</span>` : ''}
+          ${hasTranscript ? '<span class="vc-transcribed">📝 전사완료</span>' : ''}
         </div>
         <div class="vc-actions">
+          <button class="vc-btn transcribe ${hasTranscript ? 'done' : ''}" onclick="event.stopPropagation();transcribeVideo(${v.id})">${hasTranscript ? '📝 분석보기' : '🎙 전사하기'}</button>
           <button class="vc-btn reels" onclick="event.stopPropagation();openCreatePlan(${v.id},'reels')">릴스</button>
           <button class="vc-btn card" onclick="event.stopPropagation();openCreatePlan(${v.id},'card_news')">카드뉴스</button>
           <button class="vc-btn story" onclick="event.stopPropagation();openCreatePlan(${v.id},'story')">스토리</button>
@@ -219,6 +222,126 @@ function videoCardHTML(v) {
       </div>
     </div>
   `;
+}
+
+// ─── 전사 & 분석 ───
+async function transcribeVideo(videoId) {
+  // 먼저 기존 전사 결과 확인
+  const existing = await api(`/api/videos/${videoId}/transcript`);
+  if (existing.has_transcript) {
+    showTranscriptModal(videoId, existing.transcript, existing.analysis);
+    return;
+  }
+
+  // 전사 실행
+  const btn = event?.target;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 전사중...'; }
+
+  try {
+    const result = await api(`/api/videos/${videoId}/transcribe`, {
+      method: 'POST',
+      body: {}
+    });
+
+    if (result.status === 'ok' || result.status === 'cached') {
+      showToast(`전사 완료! (${result.word_count}자)`, 'success');
+      showTranscriptModal(videoId, result.transcript, result.analysis);
+      // 카드 업데이트
+      if (currentPage === 'ideas') loadIdeas(state.videos.page);
+    } else {
+      showToast('전사 실패: ' + (result.error || '자막 없음'), 'error');
+    }
+  } catch (e) {
+    showToast('전사 오류: ' + e.message, 'error');
+  }
+
+  if (btn) { btn.disabled = false; btn.textContent = '🎙 전사하기'; }
+}
+
+function showTranscriptModal(videoId, transcript, analysis) {
+  const mc = document.getElementById('modalContent');
+
+  const analysisHTML = analysis ? `
+    <div class="transcript-analysis">
+      <div class="ta-section">
+        <h4>핵심 팩트</h4>
+        <ul>${(analysis.key_facts || []).map(f => `<li>${escHTML(f)}</li>`).join('')}</ul>
+      </div>
+      ${analysis.hook_candidates ? `
+        <div class="ta-section">
+          <h4>후킹 후보</h4>
+          <ul>${analysis.hook_candidates.map(h => `<li class="hook-item">${escHTML(h)}</li>`).join('')}</ul>
+        </div>` : ''}
+      ${analysis.product_names?.length ? `
+        <div class="ta-section">
+          <h4>제품/기술</h4>
+          <div class="tag-list">${analysis.product_names.map(p => `<span class="tag">${escHTML(p)}</span>`).join('')}</div>
+        </div>` : ''}
+      ${analysis.reels_ideas?.length ? `
+        <div class="ta-section">
+          <h4>릴스 아이디어</h4>
+          ${analysis.reels_ideas.map(r => `
+            <div class="idea-card">
+              <span class="idea-style">${r.style}</span>
+              <strong>${escHTML(r.title || '')}</strong>
+              <p>${escHTML(r.hook || '')}</p>
+            </div>
+          `).join('')}
+        </div>` : ''}
+      ${analysis.summary ? `
+        <div class="ta-section">
+          <h4>요약</h4>
+          <p>${escHTML(analysis.summary)}</p>
+        </div>` : ''}
+      ${analysis.best_quotes?.length ? `
+        <div class="ta-section">
+          <h4>인용 가능 문구</h4>
+          <ul>${analysis.best_quotes.map(q => `<li class="quote-item">"${escHTML(q)}"</li>`).join('')}</ul>
+        </div>` : ''}
+    </div>
+  ` : '<p style="color:var(--text-dim);">분석 결과가 없습니다. Claude API 키가 설정되어 있으면 자동 분석됩니다.</p>';
+
+  mc.innerHTML = `
+    <div class="modal-title">📝 영상 전사 & 분석</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <button class="btn btn-secondary tab-btn active" onclick="showTranscriptTab('analysis', this)">분석 결과</button>
+      <button class="btn btn-secondary tab-btn" onclick="showTranscriptTab('transcript', this)">전사 텍스트</button>
+      <button class="btn btn-primary" onclick="reanalyzeVideo(${videoId})" style="margin-left:auto;">🔄 재분석</button>
+    </div>
+    <div id="transcriptTabAnalysis">${analysisHTML}</div>
+    <div id="transcriptTabTranscript" style="display:none;">
+      <div class="transcript-text">${escHTML(transcript || '').replace(/\n/g, '<br>')}</div>
+      <p style="color:var(--text-dim);font-size:0.8em;margin-top:8px;">${transcript ? transcript.length + '자' : ''}</p>
+    </div>
+  `;
+
+  document.getElementById('modal').classList.add('show');
+}
+
+function showTranscriptTab(tab, btn) {
+  document.getElementById('transcriptTabAnalysis').style.display = tab === 'analysis' ? '' : 'none';
+  document.getElementById('transcriptTabTranscript').style.display = tab === 'transcript' ? '' : 'none';
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+}
+
+async function reanalyzeVideo(videoId) {
+  showToast('재분석 중...', 'info');
+  try {
+    const result = await api(`/api/videos/${videoId}/analyze`, {
+      method: 'POST',
+      body: {}
+    });
+    if (result.status === 'ok') {
+      showToast('재분석 완료!', 'success');
+      const tr = await api(`/api/videos/${videoId}/transcript`);
+      showTranscriptModal(videoId, tr.transcript, tr.analysis);
+    } else {
+      showToast('재분석 실패: ' + (result.error || ''), 'error');
+    }
+  } catch (e) {
+    showToast('재분석 오류: ' + e.message, 'error');
+  }
 }
 
 function filterByTopic(topic) {

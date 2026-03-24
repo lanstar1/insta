@@ -209,6 +209,8 @@ def init_db():
             duration TEXT,
             topic TEXT,
             summary TEXT,
+            transcript TEXT,
+            transcript_analysis TEXT,
             created_at TIMESTAMP DEFAULT NOW()
         )""")
 
@@ -276,6 +278,8 @@ def init_db():
             duration TEXT,
             topic TEXT,
             summary TEXT,
+            transcript TEXT,
+            transcript_analysis TEXT,
             created_at TEXT DEFAULT (datetime('now'))
         )""")
 
@@ -331,12 +335,36 @@ def init_db():
 
     conn.commit()
 
+    # 마이그레이션: 기존 videos 테이블에 transcript 컬럼 추가
+    _migrate_add_transcript(conn)
+
     # 기본 템포 규칙 삽입
     _check_and_seed(conn)
 
     conn.close()
     db_type = "PostgreSQL" if USE_PG else f"SQLite ({DB_PATH})"
     print(f"[DB] Initialized: {db_type}")
+
+
+def _migrate_add_transcript(conn):
+    """기존 videos 테이블에 transcript/transcript_analysis 컬럼 추가 (마이그레이션)"""
+    try:
+        if USE_PG:
+            c = conn.cursor()
+            c._cursor.execute("ALTER TABLE videos ADD COLUMN IF NOT EXISTS transcript TEXT")
+            c._cursor.execute("ALTER TABLE videos ADD COLUMN IF NOT EXISTS transcript_analysis TEXT")
+        else:
+            c = conn.cursor()
+            # SQLite: pragma로 컬럼 존재 확인
+            c.execute("PRAGMA table_info(videos)")
+            cols = [row[1] if isinstance(row, tuple) else row["name"] for row in c.fetchall()]
+            if "transcript" not in cols:
+                c.execute("ALTER TABLE videos ADD COLUMN transcript TEXT")
+            if "transcript_analysis" not in cols:
+                c.execute("ALTER TABLE videos ADD COLUMN transcript_analysis TEXT")
+        conn.commit()
+    except Exception as e:
+        print(f"[DB] Migration note: {e}")
 
 
 def _check_and_seed(conn):

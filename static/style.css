@@ -183,6 +183,31 @@ body {
 .vc-planned {
   font-size: 0.7em; color: var(--green); margin-left: auto;
 }
+.vc-transcribed {
+  font-size: 0.7em; color: var(--cyan); background: rgba(0,229,255,0.1);
+  padding: 1px 6px; border-radius: 4px;
+}
+.vc-btn.transcribe { background: var(--cyan); color: #000; font-weight: bold; }
+.vc-btn.transcribe.done { background: rgba(0,229,255,0.2); color: var(--cyan); }
+
+/* ─── Transcript & Analysis ─── */
+.transcript-analysis { display: flex; flex-direction: column; gap: 16px; }
+.ta-section h4 { color: var(--accent); font-size: 0.9em; margin-bottom: 8px; font-family: 'Do Hyeon'; }
+.ta-section ul { list-style: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.ta-section li { padding: 6px 10px; background: var(--surface2); border-radius: 6px; font-size: 0.85em; }
+.ta-section li.hook-item { border-left: 3px solid var(--yellow); }
+.ta-section li.quote-item { border-left: 3px solid var(--purple); font-style: italic; }
+.tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { padding: 3px 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 12px; font-size: 0.8em; color: var(--cyan); }
+.idea-card { padding: 10px; background: var(--surface2); border-radius: 8px; margin-bottom: 8px; }
+.idea-card .idea-style { font-size: 0.7em; padding: 2px 8px; background: var(--accent); color: #fff; border-radius: 4px; margin-right: 8px; }
+.idea-card p { font-size: 0.85em; color: var(--text-dim); margin-top: 4px; }
+.transcript-text {
+  max-height: 400px; overflow-y: auto; padding: 12px; background: var(--surface2);
+  border-radius: 8px; font-size: 0.85em; line-height: 1.6; white-space: pre-wrap;
+}
+.tab-btn { font-size: 0.8em !important; padding: 6px 14px !important; }
+.tab-btn.active { background: var(--accent) !important; color: #fff !important; }
 
 /* ─── Plans List ─── */
 .plan-list { display: flex; flex-direction: column; gap: 10px; }

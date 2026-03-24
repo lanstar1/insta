@@ -81,7 +81,8 @@ STYLE_TEMPLATES = {
 
 def build_prompt(video_title: str, video_topic: str, video_summary: str,
                  content_type: str, reels_style: Optional[str] = None,
-                 hook_text: Optional[str] = None, target_duration: int = 25) -> str:
+                 hook_text: Optional[str] = None, target_duration: int = 25,
+                 transcript: str = "", transcript_analysis: str = "") -> str:
     """콘텐츠 유형에 맞는 스크립트 생성 프롬프트 구성"""
 
     if content_type == "reels":
@@ -136,6 +137,22 @@ def build_prompt(video_title: str, video_topic: str, video_summary: str,
   "caption": null
 }"""
 
+    # 전사 섹션 구성 (f-string 중첩 회피)
+    transcript_section = ""
+    if transcript:
+        t_text = transcript[:6000]
+        transcript_section = f"\n## 영상 전사 텍스트 (팩트 기반 콘텐츠 소스):\n{t_text}\n"
+    analysis_section = ""
+    if transcript_analysis:
+        analysis_section = f"\n## 전사 분석 결과:\n{transcript_analysis}\n"
+
+    fact_instruction = ""
+    if transcript or transcript_analysis:
+        fact_instruction = "\n**중요: 전사 텍스트에 있는 구체적 사실, 숫자, 제품명, 비교 데이터를 반드시 활용해.**"
+
+    hook_line = f"- 후킹 텍스트 힌트: {hook_text}" if hook_text else ""
+    dur_line = f"- 목표 길이: {target_duration}초" if content_type == "reels" else ""
+
     prompt = f"""{PERSONA}
 
 {style_guide}
@@ -144,10 +161,10 @@ def build_prompt(video_title: str, video_topic: str, video_summary: str,
 - 제목: {video_title}
 - 주제: {video_topic}
 - 요약: {video_summary}
-{f'- 후킹 텍스트 힌트: {hook_text}' if hook_text else ''}
-{f'- 목표 길이: {target_duration}초' if content_type == 'reels' else ''}
-
-위 영상의 핵심 내용을 기반으로 인스타그램 {content_type} 스크립트를 생성해줘.
+{hook_line}
+{dur_line}
+{transcript_section}{analysis_section}
+위 영상의 핵심 내용을 기반으로 인스타그램 {content_type} 스크립트를 생성해줘.{fact_instruction}
 AI가 만든 느낌이 아닌, 자연스럽고 유머러스하고 정보성 있는 톤으로.
 공유/저장을 유발할 수 있는 임팩트 있는 내용으로 만들어줘.
 
@@ -161,8 +178,9 @@ JSON만 출력해. 다른 설명 없이."""
 def generate_script_claude(video_title: str, video_topic: str, video_summary: str,
                            content_type: str, reels_style: Optional[str] = None,
                            hook_text: Optional[str] = None, target_duration: int = 25,
-                           api_key: Optional[str] = None) -> dict:
-    """Claude API로 스크립트 생성"""
+                           api_key: Optional[str] = None,
+                           transcript: str = "", transcript_analysis: str = "") -> dict:
+    """Claude API로 스크립트 생성 (전사 텍스트가 있으면 팩트 기반)"""
 
     key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
     if not key:
@@ -174,7 +192,8 @@ def generate_script_claude(video_title: str, video_topic: str, video_summary: st
 
     client = anthropic.Anthropic(api_key=key)
     prompt = build_prompt(video_title, video_topic, video_summary,
-                          content_type, reels_style, hook_text, target_duration)
+                          content_type, reels_style, hook_text, target_duration,
+                          transcript=transcript, transcript_analysis=transcript_analysis)
 
     try:
         response = client.messages.create(

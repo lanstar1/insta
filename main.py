@@ -16,6 +16,7 @@ from database import get_db, init_db
 from script_engine import generate_script_claude, generate_script_fallback, check_spelling
 from media_engine import run_media_pipeline, generate_tts, MEDIA_DIR
 from instagram_api import InstagramClient, ScheduleManager
+from transcriber import get_transcript, analyze_transcript
 
 app = FastAPI(title="LANstar Insta Agent", version="0.2.0")
 
@@ -93,6 +94,14 @@ class ScheduleSuggestRequest(BaseModel):
     start_date: Optional[str] = None
 
 
+class TranscribeRequest(BaseModel):
+    api_key: Optional[str] = None  # Claude API key for analysis
+
+
+class AnalyzeRequest(BaseModel):
+    api_key: Optional[str] = None
+
+
 # ─── Root ───
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -149,7 +158,13 @@ async def get_videos(
         LIMIT ? OFFSET ?
     """, params + [limit, offset])
 
-    videos = [dict(row) for row in c.fetchall()]
+    videos = []
+    for row in c.fetchall():
+        v = dict(row)
+        # 목록에서는 전사 텍스트 전체를 보내지 않고 플래그만
+        v["transcript"] = "yes" if v.get("transcript") else ""
+        v.pop("transcript_analysis", None)
+        videos.append(v)
     conn.close()
 
     return {
@@ -216,6 +231,139 @@ async def get_stats():
 
     conn.close()
     return stats
+
+
+# ─── 전사 & 분석 (Transcription & Analysis) ───
+@app.post("/api/videos/{video_id}/transcribe")
+async def transcribe_video(video_id: int, req: TranscribeRequest = None):
+    """유튜브 영상 자막 전사 + Claude 분석"""
+    conn = get_db()
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
+    video = c.fetchone()
+    if not video:
+        conn.close()
+        raise HTTPException(404, "Video not found")
+
+    video = dict(video)
+
+    # 이미 전사된 경우 캐시 반환
+    if video.get("transcript"):
+        analysis = None
+        if video.get("transcript_analysis"):
+            try:
+                analysis = json.loads(video["transcript_analysis"])
+            except Exception:
+                analysis = None
+        conn.close()
+        return {
+            "status": "cached",
+            "transcript": video["transcript"],
+            "analysis": analysis,
+            "word_count": len(video["transcript"]),
+        }
+
+    # 전사 실행
+    url = video.get("url", "")
+    result = get_transcript(url)
+
+    if result.get("status") != "ok":
+        conn.close()
+        return result
+
+    transcript_text = result["transcript"]
+
+    # Claude 분석 (API 키 있을 때)
+    api_key = (req.api_key if req else None) or os.environ.get("ANTHROPIC_API_KEY", "")
+    analysis = analyze_transcript(
+        transcript_text,
+        video_title=video.get("title", ""),
+        video_topic=video.get("topic", ""),
+        api_key=api_key
+    )
+
+    # DB 저장
+    analysis_json = json.dumps(analysis, ensure_ascii=False) if analysis else None
+    c.execute("UPDATE videos SET transcript = ?, transcript_analysis = ? WHERE id = ?",
+              (transcript_text, analysis_json, video_id))
+    conn.commit()
+    conn.close()
+
+    return {
+        "status": "ok",
+        "transcript": transcript_text,
+        "analysis": analysis,
+        "language": result.get("language", ""),
+        "duration_sec": result.get("duration_sec", 0),
+        "word_count": result.get("word_count", 0),
+        "segment_count": result.get("segment_count", 0),
+    }
+
+
+@app.post("/api/videos/{video_id}/analyze")
+async def analyze_video(video_id: int, req: AnalyzeRequest = None):
+    """이미 전사된 텍스트를 (재)분석"""
+    conn = get_db()
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
+    video = c.fetchone()
+    if not video:
+        conn.close()
+        raise HTTPException(404, "Video not found")
+
+    video = dict(video)
+    if not video.get("transcript"):
+        conn.close()
+        return {"status": "error", "error": "전사 텍스트가 없습니다. 먼저 전사를 실행하세요."}
+
+    api_key = (req.api_key if req else None) or os.environ.get("ANTHROPIC_API_KEY", "")
+    analysis = analyze_transcript(
+        video["transcript"],
+        video_title=video.get("title", ""),
+        video_topic=video.get("topic", ""),
+        api_key=api_key
+    )
+
+    # DB 업데이트
+    analysis_json = json.dumps(analysis, ensure_ascii=False)
+    c.execute("UPDATE videos SET transcript_analysis = ? WHERE id = ?",
+              (analysis_json, video_id))
+    conn.commit()
+    conn.close()
+
+    return {"status": "ok", "analysis": analysis}
+
+
+@app.get("/api/videos/{video_id}/transcript")
+async def get_video_transcript(video_id: int):
+    """전사 텍스트 조회"""
+    conn = get_db()
+    c = conn.cursor()
+
+    c.execute("SELECT id, title, transcript, transcript_analysis FROM videos WHERE id = ?", (video_id,))
+    video = c.fetchone()
+    conn.close()
+
+    if not video:
+        raise HTTPException(404, "Video not found")
+
+    video = dict(video)
+    analysis = None
+    if video.get("transcript_analysis"):
+        try:
+            analysis = json.loads(video["transcript_analysis"])
+        except Exception:
+            pass
+
+    t = video.get("transcript") or ""
+    return {
+        "has_transcript": bool(t),
+        "transcript": t,
+        "analysis": analysis,
+        "word_count": len(t),
+    }
 
 
 # ─── Content Plans ───
@@ -395,9 +543,10 @@ async def generate_script(req: GenerateScriptRequest):
     conn = get_db()
     c = conn.cursor()
 
-    # Plan + Video 정보 조회
+    # Plan + Video 정보 조회 (전사 텍스트 포함)
     c.execute("""
-        SELECT cp.*, v.title as video_title, v.topic, v.summary
+        SELECT cp.*, v.title as video_title, v.topic, v.summary,
+               v.transcript, v.transcript_analysis
         FROM content_plans cp
         LEFT JOIN videos v ON cp.video_id = v.id
         WHERE cp.id = ?
@@ -409,7 +558,25 @@ async def generate_script(req: GenerateScriptRequest):
 
     plan = dict(plan)
 
-    # 스크립트 생성
+    # 전사 분석 결과 텍스트 변환
+    analysis_text = ""
+    if plan.get("transcript_analysis"):
+        try:
+            analysis = json.loads(plan["transcript_analysis"])
+            parts = []
+            if analysis.get("key_facts"):
+                parts.append("핵심 팩트: " + " / ".join(analysis["key_facts"][:5]))
+            if analysis.get("hook_candidates"):
+                parts.append("후킹 후보: " + " / ".join(analysis["hook_candidates"][:3]))
+            if analysis.get("product_names"):
+                parts.append("제품/기술: " + ", ".join(analysis["product_names"][:5]))
+            if analysis.get("summary"):
+                parts.append("요약: " + analysis["summary"])
+            analysis_text = "\n".join(parts)
+        except Exception:
+            pass
+
+    # 스크립트 생성 (전사 텍스트가 있으면 팩트 기반)
     result = generate_script_claude(
         video_title=plan.get("video_title") or plan.get("title", ""),
         video_topic=plan.get("topic", ""),
@@ -418,7 +585,9 @@ async def generate_script(req: GenerateScriptRequest):
         reels_style=plan.get("reels_style"),
         hook_text=plan.get("hook_text"),
         target_duration=plan.get("target_duration", 25),
-        api_key=req.api_key
+        api_key=req.api_key,
+        transcript=plan.get("transcript", ""),
+        transcript_analysis=analysis_text,
     )
 
     if "error" in result:
