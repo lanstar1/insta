@@ -1,0 +1,8 @@
+__pycache__
+*.pyc
+.env
+media/
+data/insta_agent.db
+*.db-wal
+*.db-shm
+.git

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LANstar Insta Agent</title>
+<link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Jua&family=Do+Hyeon&family=Noto+Sans+KR:wght@400;600;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css?v=20260324a">
+</head>
+<body>
+
+<!-- Sidebar -->
+<nav id="sidebar">
+  <div class="sidebar-logo">
+    <span class="logo-icon">⚡</span>
+    <span class="logo-text">Insta Agent</span>
+  </div>
+  <div class="sidebar-menu">
+    <button class="menu-item active" data-page="dashboard" onclick="navigate('dashboard')">
+      <span class="mi-icon">📊</span>
+      <span class="mi-text">대시보드</span>
+    </button>
+    <button class="menu-item" data-page="ideas" onclick="navigate('ideas')">
+      <span class="mi-icon">💡</span>
+      <span class="mi-text">아이디어 뱅크</span>
+    </button>
+    <button class="menu-item" data-page="plans" onclick="navigate('plans')">
+      <span class="mi-icon">📋</span>
+      <span class="mi-text">콘텐츠 기획</span>
+    </button>
+    <button class="menu-item" data-page="script" onclick="navigate('script')">
+      <span class="mi-icon">✍️</span>
+      <span class="mi-text">스크립트 에디터</span>
+    </button>
+    <button class="menu-item" data-page="media" onclick="navigate('media')">
+      <span class="mi-icon">🎬</span>
+      <span class="mi-text">미디어 생성</span>
+    </button>
+    <button class="menu-item" data-page="publish" onclick="navigate('publish')">
+      <span class="mi-icon">📤</span>
+      <span class="mi-text">업로드/스케줄</span>
+    </button>
+    <button class="menu-item" data-page="templates" onclick="navigate('templates')">
+      <span class="mi-icon">⚙️</span>
+      <span class="mi-text">템포 규칙</span>
+    </button>
+  </div>
+  <div class="sidebar-footer">
+    <div class="sf-label">LANstar랜스타</div>
+    <div class="sf-sub">v0.2.0 - Render 배포</div>
+  </div>
+</nav>
+
+<!-- Main -->
+<main id="main">
+  <!-- Top Bar -->
+  <header id="topbar">
+    <button id="menuToggle" onclick="toggleSidebar()">☰</button>
+    <h2 id="pageTitle">대시보드</h2>
+    <div class="topbar-right">
+      <span id="videoCount" class="badge">-</span>
+    </div>
+  </header>
+
+  <!-- Pages -->
+  <div id="content">
+    <!-- Dashboard -->
+    <div class="page active" id="page-dashboard"></div>
+    <!-- Ideas -->
+    <div class="page" id="page-ideas"></div>
+    <!-- Plans -->
+    <div class="page" id="page-plans"></div>
+    <!-- Script Editor -->
+    <div class="page" id="page-script"></div>
+    <!-- Media -->
+    <div class="page" id="page-media"></div>
+    <!-- Publish -->
+    <div class="page" id="page-publish"></div>
+    <!-- Templates -->
+    <div class="page" id="page-templates"></div>
+  </div>
+</main>
+
+<!-- Modal -->
+<div id="modal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)closeModal()">
+  <div class="modal-content" id="modalContent"></div>
+</div>
+
+<script src="/static/app.js?v=20260324a"></script>
+</body>
+</html>

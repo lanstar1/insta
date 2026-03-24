@@ -1,0 +1,504 @@
+/* ─── LANstar Insta Agent ─── */
+:root {
+  --bg: #0a0a0f;
+  --surface: #12121a;
+  --surface2: #1a1a28;
+  --surface3: #222235;
+  --border: #2a2a3d;
+  --text: #e8e8f0;
+  --text-dim: #8888a0;
+  --accent: #FF2D55;
+  --accent-light: #ff5c7c;
+  --yellow: #FFD60A;
+  --cyan: #00E5FF;
+  --green: #00E676;
+  --purple: #9b59b6;
+  --orange: #FF6B2B;
+  --radius: 12px;
+  --sidebar-w: 220px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'Noto Sans KR', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  display: flex;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ─── Sidebar ─── */
+#sidebar {
+  width: var(--sidebar-w);
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; bottom: 0; left: 0;
+  z-index: 50;
+  transition: transform 0.3s;
+}
+.sidebar-logo {
+  padding: 20px 16px;
+  display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.logo-icon { font-size: 1.4em; }
+.logo-text { font-family: 'Black Han Sans'; font-size: 1.15em; color: var(--accent); }
+.sidebar-menu { flex: 1; padding: 12px 8px; display: flex; flex-direction: column; gap: 4px; }
+.menu-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; border-radius: 8px;
+  background: none; border: none; color: var(--text-dim);
+  font-size: 0.9em; cursor: pointer; transition: 0.15s;
+  text-align: left; width: 100%;
+}
+.menu-item:hover { background: var(--surface2); color: var(--text); }
+.menu-item.active { background: rgba(255,45,85,0.12); color: var(--accent); }
+.mi-icon { font-size: 1.1em; width: 24px; text-align: center; }
+.sidebar-footer {
+  padding: 14px 16px; border-top: 1px solid var(--border);
+  font-size: 0.78em;
+}
+.sf-label { color: var(--text); font-weight: 600; }
+.sf-sub { color: var(--text-dim); margin-top: 2px; }
+
+/* ─── Main ─── */
+#main {
+  flex: 1;
+  margin-left: var(--sidebar-w);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+#topbar {
+  height: 56px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 20px; gap: 16px;
+  position: sticky; top: 0; z-index: 40;
+}
+#menuToggle { display: none; background: none; border: none; color: var(--text); font-size: 1.3em; cursor: pointer; }
+#pageTitle { font-family: 'Do Hyeon'; font-size: 1.15em; flex: 1; }
+.topbar-right { display: flex; gap: 8px; align-items: center; }
+.badge {
+  background: var(--surface2); color: var(--text-dim);
+  padding: 4px 12px; border-radius: 20px; font-size: 0.78em;
+}
+#content { flex: 1; padding: 20px; overflow-y: auto; }
+.page { display: none; }
+.page.active { display: block; }
+
+/* ─── Cards & Grids ─── */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+}
+.stat-card .sc-label { font-size: 0.78em; color: var(--text-dim); }
+.stat-card .sc-value { font-family: 'Black Han Sans'; font-size: 1.8em; margin-top: 4px; }
+.stat-card .sc-sub { font-size: 0.72em; color: var(--text-dim); margin-top: 2px; }
+
+.section-title {
+  font-family: 'Do Hyeon'; font-size: 1.1em; margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+
+/* ─── Filters ─── */
+.filter-bar {
+  display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center;
+}
+.filter-bar input, .filter-bar select {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.88em;
+  outline: none;
+}
+.filter-bar input { flex: 1; min-width: 200px; }
+.filter-bar input:focus, .filter-bar select:focus { border-color: var(--accent); }
+.filter-bar input::placeholder { color: var(--text-dim); }
+
+/* Topic chips */
+.topic-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+.topic-chip {
+  padding: 5px 14px; border-radius: 20px;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text-dim); font-size: 0.8em; cursor: pointer;
+  transition: 0.15s; white-space: nowrap;
+}
+.topic-chip:hover { border-color: var(--accent); color: var(--text); }
+.topic-chip.active { background: rgba(255,45,85,0.15); border-color: var(--accent); color: var(--accent); }
+
+/* ─── Video Grid ─── */
+.video-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.video-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  transition: 0.2s;
+  cursor: pointer;
+}
+.video-card:hover { border-color: var(--accent); transform: translateY(-2px); }
+.vc-body { padding: 14px; }
+.vc-title {
+  font-size: 0.92em; font-weight: 600; line-height: 1.5;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.vc-meta {
+  display: flex; align-items: center; gap: 8px; margin-top: 8px;
+  flex-wrap: wrap;
+}
+.vc-views {
+  font-family: 'Do Hyeon'; font-size: 0.85em; color: var(--yellow);
+}
+.vc-topic {
+  padding: 2px 8px; border-radius: 12px; font-size: 0.7em;
+  background: rgba(0,229,255,0.1); color: var(--cyan);
+}
+.vc-duration {
+  font-size: 0.75em; color: var(--text-dim);
+}
+.vc-actions {
+  display: flex; gap: 6px; margin-top: 10px;
+}
+.vc-btn {
+  padding: 5px 12px; border-radius: 8px;
+  font-size: 0.75em; font-family: 'Do Hyeon';
+  border: none; cursor: pointer; transition: 0.15s;
+  color: #fff;
+}
+.vc-btn.reels { background: var(--accent); }
+.vc-btn.card { background: var(--orange); }
+.vc-btn.story { background: var(--purple); }
+.vc-btn:hover { opacity: 0.85; transform: scale(1.02); }
+
+.vc-planned {
+  font-size: 0.7em; color: var(--green); margin-left: auto;
+}
+
+/* ─── Plans List ─── */
+.plan-list { display: flex; flex-direction: column; gap: 10px; }
+.plan-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex; align-items: center; gap: 14px;
+  transition: 0.15s; cursor: pointer;
+}
+.plan-item:hover { border-color: var(--accent); }
+.plan-type-badge {
+  padding: 4px 10px; border-radius: 8px;
+  font-family: 'Do Hyeon'; font-size: 0.78em;
+  white-space: nowrap;
+}
+.plan-type-badge.reels { background: rgba(255,45,85,0.15); color: var(--accent); }
+.plan-type-badge.card_news { background: rgba(255,107,43,0.15); color: var(--orange); }
+.plan-type-badge.story { background: rgba(155,89,182,0.15); color: var(--purple); }
+.plan-info { flex: 1; }
+.plan-title { font-size: 0.9em; font-weight: 600; }
+.plan-sub { font-size: 0.75em; color: var(--text-dim); margin-top: 2px; }
+.plan-status {
+  padding: 3px 10px; border-radius: 12px;
+  font-size: 0.72em; font-family: 'Do Hyeon';
+}
+.plan-status.idea { background: rgba(136,136,160,0.15); color: var(--text-dim); }
+.plan-status.scripting { background: rgba(0,229,255,0.15); color: var(--cyan); }
+.plan-status.editing { background: rgba(255,214,10,0.15); color: var(--yellow); }
+.plan-status.review { background: rgba(0,230,118,0.15); color: var(--green); }
+.plan-status.published { background: rgba(255,45,85,0.15); color: var(--accent); }
+
+/* ─── Tempo Rules ─── */
+.rules-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.rule-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.rule-card .rc-header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+}
+.rule-card .rc-name { font-family: 'Do Hyeon'; font-size: 0.9em; }
+.rule-card .rc-type {
+  padding: 2px 8px; border-radius: 10px; font-size: 0.65em;
+}
+.rule-card .rc-value { font-family: 'Jua'; font-size: 1.1em; color: var(--yellow); }
+.rule-card .rc-desc { font-size: 0.75em; color: var(--text-dim); margin-top: 4px; }
+
+/* ─── Pagination ─── */
+.pagination {
+  display: flex; justify-content: center; gap: 6px; margin-top: 20px;
+}
+.pagination button {
+  padding: 6px 14px; border-radius: 8px;
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text-dim); font-size: 0.85em; cursor: pointer;
+}
+.pagination button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.pagination button:hover { border-color: var(--accent); }
+
+/* ─── Modal ─── */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; backdrop-filter: blur(4px);
+}
+.modal-content {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  max-width: 520px; width: 90%;
+  max-height: 80vh; overflow-y: auto;
+}
+.modal-title { font-family: 'Do Hyeon'; font-size: 1.2em; margin-bottom: 16px; }
+.modal-row { margin-bottom: 12px; }
+.modal-row label { display: block; font-size: 0.8em; color: var(--text-dim); margin-bottom: 4px; }
+.modal-row input, .modal-row select, .modal-row textarea {
+  width: 100%;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.9em;
+  outline: none;
+  font-family: inherit;
+}
+.modal-row textarea { resize: vertical; min-height: 80px; }
+.modal-row input:focus, .modal-row select:focus, .modal-row textarea:focus { border-color: var(--accent); }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+.btn {
+  padding: 8px 20px; border-radius: 8px;
+  font-family: 'Do Hyeon'; font-size: 0.9em;
+  border: none; cursor: pointer; transition: 0.15s;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-secondary { background: var(--surface2); color: var(--text-dim); border: 1px solid var(--border); }
+.btn:hover { opacity: 0.85; }
+
+/* ─── Style select cards ─── */
+.style-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.style-opt {
+  padding: 12px; border-radius: 10px;
+  background: var(--surface2); border: 2px solid var(--border);
+  cursor: pointer; transition: 0.15s; text-align: center;
+}
+.style-opt:hover { border-color: var(--accent); }
+.style-opt.selected { border-color: var(--accent); background: rgba(255,45,85,0.1); }
+.style-opt .so-icon { font-size: 1.5em; }
+.style-opt .so-label { font-family: 'Do Hyeon'; font-size: 0.82em; margin-top: 4px; }
+.style-opt .so-pct { font-size: 0.68em; color: var(--text-dim); }
+
+/* ─── Empty state ─── */
+.empty-state {
+  text-align: center; padding: 60px 20px; color: var(--text-dim);
+}
+.empty-state .es-icon { font-size: 3em; margin-bottom: 12px; }
+.empty-state .es-text { font-family: 'Jua'; font-size: 1.1em; }
+
+/* ─── Script Editor ─── */
+.script-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 16px;
+  min-height: calc(100vh - 140px);
+}
+.script-sidebar {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  height: fit-content;
+  position: sticky; top: 76px;
+}
+.script-sidebar .ss-title {
+  font-family: 'Do Hyeon'; font-size: 0.9em;
+  margin-bottom: 10px; color: var(--text-dim);
+}
+.plan-select-item {
+  padding: 10px 12px; border-radius: 8px;
+  background: var(--surface2); border: 1px solid var(--border);
+  margin-bottom: 6px; cursor: pointer; transition: 0.15s;
+}
+.plan-select-item:hover { border-color: var(--accent); }
+.plan-select-item.active { border-color: var(--accent); background: rgba(255,45,85,0.08); }
+.plan-select-item .psi-type {
+  font-size: 0.7em; padding: 2px 6px; border-radius: 6px;
+  display: inline-block; margin-bottom: 4px;
+}
+.plan-select-item .psi-title {
+  font-size: 0.82em; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.plan-select-item .psi-sub { font-size: 0.7em; color: var(--text-dim); }
+
+.script-main {
+  display: flex; flex-direction: column; gap: 14px;
+}
+.script-header {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px; display: flex; align-items: center; gap: 12px;
+  flex-wrap: wrap;
+}
+.script-header .sh-title { font-family: 'Do Hyeon'; font-size: 1.1em; flex: 1; }
+.script-header .sh-badge {
+  padding: 4px 10px; border-radius: 8px; font-size: 0.75em; font-family: 'Do Hyeon';
+}
+
+.gen-btn {
+  padding: 8px 16px; border-radius: 8px;
+  font-family: 'Do Hyeon'; font-size: 0.88em;
+  border: none; cursor: pointer; transition: 0.15s;
+  display: flex; align-items: center; gap: 6px;
+}
+.gen-btn:hover { opacity: 0.85; transform: scale(1.02); }
+.gen-btn.primary { background: var(--accent); color: #fff; }
+.gen-btn.secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.gen-btn.success { background: var(--green); color: #000; }
+.gen-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.script-info-row {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.script-info-row label {
+  font-size: 0.75em; color: var(--text-dim); display: block; margin-bottom: 4px;
+}
+.script-info-row input, .script-info-row textarea {
+  width: 100%; background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text); padding: 8px 12px; border-radius: 8px;
+  font-size: 0.88em; outline: none; font-family: inherit;
+}
+.script-info-row input:focus, .script-info-row textarea:focus { border-color: var(--accent); }
+.script-info-row textarea { resize: vertical; min-height: 60px; }
+
+.scene-timeline {
+  display: flex; flex-direction: column; gap: 8px;
+}
+.scene-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px; transition: 0.2s;
+  position: relative;
+}
+.scene-card:hover { border-color: var(--accent); }
+.scene-card.dragging { opacity: 0.5; border-style: dashed; }
+.scene-card .sc-header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 10px;
+}
+.scene-card .sc-num {
+  font-family: 'Black Han Sans'; font-size: 1.2em; color: var(--accent);
+  min-width: 28px;
+}
+.scene-card .sc-type-select {
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text); padding: 3px 8px; border-radius: 6px; font-size: 0.78em;
+}
+.scene-card .sc-dur {
+  background: var(--surface2); border: 1px solid var(--border);
+  color: var(--yellow); padding: 3px 8px; border-radius: 6px;
+  font-family: 'Do Hyeon'; font-size: 0.82em; width: 60px; text-align: center;
+}
+.scene-card .sc-drag {
+  cursor: grab; color: var(--text-dim); font-size: 1.1em;
+  margin-right: 4px; user-select: none;
+}
+.scene-card .sc-delete {
+  margin-left: auto; background: none; border: none;
+  color: var(--text-dim); cursor: pointer; font-size: 0.9em;
+  padding: 4px 8px; border-radius: 6px;
+}
+.scene-card .sc-delete:hover { background: rgba(255,45,85,0.1); color: var(--accent); }
+.scene-card .sc-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.scene-card .sc-field { }
+.scene-card .sc-field label {
+  font-size: 0.7em; color: var(--text-dim); display: block; margin-bottom: 3px;
+}
+.scene-card .sc-field input,
+.scene-card .sc-field textarea {
+  width: 100%; background: var(--surface2); border: 1px solid var(--border);
+  color: var(--text); padding: 6px 10px; border-radius: 6px;
+  font-size: 0.82em; outline: none; font-family: inherit;
+}
+.scene-card .sc-field textarea { resize: vertical; min-height: 50px; }
+.scene-card .sc-field input:focus,
+.scene-card .sc-field textarea:focus { border-color: var(--accent); }
+.scene-card .sc-field-full { grid-column: 1 / -1; }
+
+.spell-issue {
+  padding: 6px 10px; border-radius: 6px;
+  background: rgba(255,214,10,0.08); border: 1px solid rgba(255,214,10,0.2);
+  font-size: 0.8em; margin-top: 4px;
+  display: flex; align-items: center; gap: 8px;
+}
+.spell-issue .si-fix {
+  color: var(--green); font-weight: 600; cursor: pointer;
+}
+
+.total-duration-bar {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 16px;
+  display: flex; align-items: center; gap: 12px;
+}
+.total-duration-bar .tdb-label { font-size: 0.8em; color: var(--text-dim); }
+.total-duration-bar .tdb-value {
+  font-family: 'Black Han Sans'; font-size: 1.3em;
+}
+.total-duration-bar .tdb-bar {
+  flex: 1; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden;
+}
+.total-duration-bar .tdb-fill {
+  height: 100%; border-radius: 4px; transition: width 0.3s, background 0.3s;
+}
+
+.add-scene-btn {
+  border: 2px dashed var(--border); border-radius: var(--radius);
+  padding: 14px; text-align: center; cursor: pointer;
+  color: var(--text-dim); font-family: 'Do Hyeon'; font-size: 0.9em;
+  transition: 0.15s; background: none;
+  width: 100%;
+}
+.add-scene-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+.script-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 60px 20px; text-align: center;
+}
+.script-empty .se-icon { font-size: 3em; margin-bottom: 12px; }
+.script-empty .se-text { font-family: 'Jua'; font-size: 1.1em; color: var(--text-dim); }
+
+@media (max-width: 900px) {
+  .script-layout { grid-template-columns: 1fr; }
+  .script-sidebar { position: static; }
+}
+
+/* ─── Responsive ─── */
+/* ─── Publish Page ─── */
+#scheduleList { display: flex; flex-direction: column; gap: 6px; margin-bottom: 20px; }
+
+@keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+@media (max-width: 768px) {
+  #sidebar { transform: translateX(-100%); }
+  #sidebar.open { transform: translateX(0); }
+  #main { margin-left: 0; }
+  #menuToggle { display: block; }
+  .video-grid { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr); }
+}

@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: lanstar-insta-agent
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: TOGETHER_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: MINIMAX_API_KEY
+        sync: false
+      - key: INSTAGRAM_ACCESS_TOKEN
+        sync: false
+      - key: INSTAGRAM_USER_ID
+        sync: false

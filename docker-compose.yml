@@ -1,0 +1,16 @@
+version: "3.8"
+
+services:
+  insta-agent:
+    build: .
+    container_name: lanstar-insta-agent
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./media:/app/media
+    env_file:
+      - .env
+    environment:
+      - PYTHONUNBUFFERED=1

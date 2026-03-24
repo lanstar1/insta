@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+data/insta_agent.db
+media/
+*.db
+.DS_Store
