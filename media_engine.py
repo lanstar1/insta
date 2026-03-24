@@ -51,7 +51,7 @@ def generate_tts(text: str, output_path: str,
     if not HAS_REQUESTS:
         return {"error": "requests 패키지 필요. pip install requests"}
 
-    vid = voice_id or ELEVENLABS_VOICES.get(DEFAULT_VOICE, ELEVENLABS_VOICES["male_friendly"])
+    vid = voice_id or os.environ.get("ELEVENLABS_VOICE_ID") or ELEVENLABS_VOICES.get(DEFAULT_VOICE, ELEVENLABS_VOICES["male_friendly"])
 
     try:
         resp = requests.post(
