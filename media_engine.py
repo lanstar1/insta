@@ -306,22 +306,48 @@ def _gen_image_openai(prompt: str, output_path: str,
 
 def _gen_image_placeholder(prompt: str, output_path: str,
                            width: int = 720, height: int = 1280) -> dict:
-    """API 없을 때 FFmpeg로 단색+텍스트 placeholder 이미지 생성 (저해상도)"""
+    """API 없을 때 FFmpeg로 깨끗한 그라데이션 배경 이미지 생성 (텍스트 없음).
+    텍스트는 composite_reels의 drawtext에서 별도로 오버레이한다."""
     # Render 메모리 제한 대응: 720x1280으로 고정
     width, height = min(width, 720), min(height, 1280)
-    try:
-        short = _escape_drawtext(prompt[:50])
-        print(f"[Placeholder] generating {width}x{height} text='{short[:30]}...'", flush=True)
 
+    # 프롬프트 내용으로 씬별 다른 색상 선택
+    colors = [
+        ("0x1a1a3e", "0x0d0d2b"),  # 딥 네이비
+        ("0x2d1b3d", "0x1a0e28"),  # 퍼플 다크
+        ("0x1b2d3d", "0x0e1a28"),  # 다크 틸
+        ("0x3d1b1b", "0x280e0e"),  # 다크 레드
+        ("0x1b3d2d", "0x0e281a"),  # 다크 그린
+        ("0x3d2d1b", "0x281a0e"),  # 다크 앰버
+        ("0x2b1b3d", "0x1a0e28"),  # 다크 바이올렛
+    ]
+    # 프롬프트 해시로 색상 선택
+    color_idx = hash(prompt) % len(colors)
+    c1, c2 = colors[color_idx]
+
+    try:
+        print(f"[Placeholder] generating clean gradient {width}x{height}", flush=True)
+
+        # 그라데이션 배경 생성 (위→아래)
         proc = subprocess.run([
             "ffmpeg", "-y", "-threads", "1",
             "-f", "lavfi",
-            "-i", f"color=c=0x1a1a28:s={width}x{height}:d=1",
-            "-vf", f"drawtext=text='{short}':fontsize=28:fontcolor=white:"
-                   f"x=(w-text_w)/2:y=(h-text_h)/2{_drawtext_font_opt()}",
+            "-i", (f"gradients=s={width}x{height}:c0={c1}:c1={c2}"
+                   f":x0=0:y0=0:x1=0:y1={height}:d=1"),
             "-frames:v", "1",
             output_path
         ], capture_output=True, timeout=10)
+
+        # gradients 필터 미지원 시 단색 fallback
+        if proc.returncode != 0:
+            print(f"[Placeholder] gradients failed, using solid color", flush=True)
+            proc = subprocess.run([
+                "ffmpeg", "-y", "-threads", "1",
+                "-f", "lavfi",
+                "-i", f"color=c={c1}:s={width}x{height}:d=1",
+                "-frames:v", "1",
+                output_path
+            ], capture_output=True, timeout=10)
 
         if proc.returncode != 0:
             print(f"[Placeholder] ffmpeg failed: {proc.stderr.decode('utf-8', errors='replace')[:300]}")
@@ -536,12 +562,20 @@ class ReelsCompositor:
                             f"anullsrc=r=44100:cl=mono", "-t", str(duration)]
 
                 # Video filter: 크기 조정 + 텍스트 오버레이
-                vf_parts = [f"scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:-1:-1"]
+                vf_parts = [f"scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:-1:-1:color=0x1a1a28"]
                 if text_clean:
-                    fontsize = 48 if scene.get("scene_type") == "hook" else 32
+                    scene_type = scene.get("scene_type", "normal")
+                    if scene_type == "hook":
+                        fontsize = 52
+                    elif scene_type == "cta":
+                        fontsize = 40
+                    else:
+                        fontsize = 36
+                    # 반투명 박스 배경 + 흰색 텍스트 + 두꺼운 테두리로 가독성 확보
                     vf_parts.append(
                         f"drawtext=text='{text_clean}':fontsize={fontsize}:"
-                        f"fontcolor=white:borderw=2:bordercolor=black:"
+                        f"fontcolor=white:borderw=3:bordercolor=0x000000@0.8:"
+                        f"box=1:boxcolor=0x000000@0.4:boxborderw=20:"
                         f"x=(w-text_w)/2:y=(h-text_h)/2{_drawtext_font_opt()}"
                     )
 
