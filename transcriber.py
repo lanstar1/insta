@@ -17,8 +17,9 @@ logger = logging.getLogger("insta-agent.transcriber")
 try:
     import yt_dlp
     HAS_YTDLP = True
-except ImportError:
+except Exception as _e:
     HAS_YTDLP = False
+    print(f"[Transcriber] yt-dlp import 실패: {_e}")
 
 # ─── youtube-transcript-api (폴백 엔진) ───
 try:
@@ -32,6 +33,9 @@ try:
     HAS_ANTHROPIC = True
 except ImportError:
     HAS_ANTHROPIC = False
+
+# 시작 시 엔진 상태 로그
+print(f"[Transcriber] 엔진 상태: yt-dlp={HAS_YTDLP}, yt-transcript-api={HAS_YT_TRANSCRIPT}, anthropic={HAS_ANTHROPIC}")
 
 CLAUDE_MODEL = "claude-sonnet-4-20250514"
 
