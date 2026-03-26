@@ -282,7 +282,7 @@ def _gen_image_openai(prompt: str, output_path: str,
                 "n": 1,
                 "response_format": "b64_json"
             },
-            timeout=60
+            timeout=20
         )
 
         if resp.status_code == 200:
@@ -305,17 +305,19 @@ def _gen_image_openai(prompt: str, output_path: str,
 
 
 def _gen_image_placeholder(prompt: str, output_path: str,
-                           width: int = 1080, height: int = 1920) -> dict:
-    """API 없을 때 FFmpeg로 단색+텍스트 placeholder 이미지 생성"""
+                           width: int = 720, height: int = 1280) -> dict:
+    """API 없을 때 FFmpeg로 단색+텍스트 placeholder 이미지 생성 (저해상도)"""
+    # Render 메모리 제한 대응: 720x1280으로 고정
+    width, height = min(width, 720), min(height, 1280)
     try:
         short = _escape_drawtext(prompt[:50])
-        print(f"[Placeholder] generating {width}x{height} text='{short[:30]}...'")
+        print(f"[Placeholder] generating {width}x{height} text='{short[:30]}...'", flush=True)
 
         proc = subprocess.run([
-            "ffmpeg", "-y",
+            "ffmpeg", "-y", "-threads", "1",
             "-f", "lavfi",
             "-i", f"color=c=0x1a1a28:s={width}x{height}:d=1",
-            "-vf", f"drawtext=text='{short}':fontsize=36:fontcolor=white:"
+            "-vf", f"drawtext=text='{short}':fontsize=28:fontcolor=white:"
                    f"x=(w-text_w)/2:y=(h-text_h)/2{_drawtext_font_opt()}",
             "-frames:v", "1",
             output_path
@@ -515,14 +517,16 @@ class ReelsCompositor:
                 text = scene.get("text_overlay", "")
                 text_clean = _escape_drawtext(text)
 
-                # FFmpeg 씬 영상 생성
-                cmd = ["ffmpeg", "-y"]
+                # FFmpeg 씬 영상 생성 (Render 512MB 메모리 제한 대응)
+                # 720x1280 해상도 + ultrafast 프리셋으로 메모리/CPU 최소화
+                W, H = 720, 1280
+                cmd = ["ffmpeg", "-y", "-threads", "1"]
 
                 if img_path and os.path.exists(img_path):
                     cmd += ["-loop", "1", "-i", img_path, "-t", str(duration)]
                 else:
                     cmd += ["-f", "lavfi", "-i",
-                            f"color=c=0x1a1a28:s=1080x1920:d={duration}"]
+                            f"color=c=0x1a1a28:s={W}x{H}:d={duration}"]
 
                 if tts_path and os.path.exists(tts_path):
                     cmd += ["-i", tts_path]
@@ -531,21 +535,22 @@ class ReelsCompositor:
                     cmd += ["-f", "lavfi", "-i",
                             f"anullsrc=r=44100:cl=mono", "-t", str(duration)]
 
-                # Video filter: 텍스트 오버레이
-                vf_parts = ["scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:-1:-1"]
+                # Video filter: 크기 조정 + 텍스트 오버레이
+                vf_parts = [f"scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:-1:-1"]
                 if text_clean:
-                    fontsize = 72 if scene.get("scene_type") == "hook" else 48
+                    fontsize = 48 if scene.get("scene_type") == "hook" else 32
                     vf_parts.append(
                         f"drawtext=text='{text_clean}':fontsize={fontsize}:"
-                        f"fontcolor=white:borderw=3:bordercolor=black:"
+                        f"fontcolor=white:borderw=2:bordercolor=black:"
                         f"x=(w-text_w)/2:y=(h-text_h)/2{_drawtext_font_opt()}"
                     )
 
                 cmd += [
                     "-vf", ",".join(vf_parts),
-                    "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+                    "-pix_fmt", "yuv420p",
                     "-c:a", "aac", "-ar", "44100",
-                    "-r", "30",
+                    "-r", "24",
                     scene_vid
                 ]
 
@@ -566,14 +571,14 @@ class ReelsCompositor:
                 for sv in scene_videos:
                     f.write(f"file '{sv}'\n")
 
+            print(f"[FFmpeg] concat {len(scene_videos)} scenes...", flush=True)
             subprocess.run([
-                "ffmpeg", "-y",
+                "ffmpeg", "-y", "-threads", "1",
                 "-f", "concat", "-safe", "0", "-i", concat_file,
-                "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                "-c:a", "aac",
+                "-c", "copy",
                 "-movflags", "+faststart",
                 output_path
-            ], capture_output=True, timeout=60)
+            ], capture_output=True, timeout=120)
 
             if os.path.exists(output_path):
                 # Duration 확인
