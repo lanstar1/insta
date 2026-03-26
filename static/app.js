@@ -249,7 +249,12 @@ async function transcribeVideo(videoId) {
       // 카드 업데이트
       if (currentPage === 'ideas') loadIdeas(state.videos.page);
     } else {
-      showToast('전사 실패: ' + (result.error || '자막 없음'), 'error');
+      const err = result.error || '자막 없음';
+      if (err.includes('blocking') || err.includes('cloud provider') || err.includes('IP')) {
+        showToast('YouTube IP 차단! 좌측 하단 🍪쿠키 설정을 해주세요.', 'error');
+      } else {
+        showToast('전사 실패: ' + err, 'error');
+      }
     }
   } catch (e) {
     showToast('전사 오류: ' + e.message, 'error');
@@ -1516,6 +1521,65 @@ function paginationHTML(current, total, fn) {
   if (current < total) html += `<button onclick="${fn}(${current + 1})">›</button>`;
   html += '</div>';
   return html;
+}
+
+// ─── Cookie Upload ───
+async function showCookieUpload() {
+  const status = await api('/api/cookie-status');
+  const mc = document.getElementById('modalContent');
+  mc.innerHTML = `
+    <h3 style="margin-bottom:12px;">🍪 YouTube 쿠키 설정</h3>
+    <p style="color:var(--text-dim);font-size:0.9em;line-height:1.6;margin-bottom:16px;">
+      Render(클라우드)에서는 YouTube가 IP를 차단하여 자막을 가져올 수 없습니다.<br>
+      브라우저에서 YouTube 쿠키를 내보내 업로드하면 전사 기능이 정상 작동합니다.
+    </p>
+    <div style="background:var(--bg-dark);padding:12px;border-radius:8px;margin-bottom:16px;font-size:0.85em;line-height:1.7;">
+      <strong>쿠키 내보내기 방법:</strong><br>
+      1. Chrome에서 <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" style="color:var(--primary);">Get cookies.txt LOCALLY</a> 확장 프로그램 설치<br>
+      2. <a href="https://www.youtube.com" target="_blank" style="color:var(--primary);">youtube.com</a> 접속 후 로그인 상태 확인<br>
+      3. 확장 프로그램 아이콘 클릭 → "Export" → cookies.txt 다운로드<br>
+      4. 아래에서 해당 파일 업로드
+    </div>
+    <div style="margin-bottom:12px;">
+      <span style="font-size:0.85em;color:${status.has_cookies ? 'var(--green)' : 'var(--text-dim)'};">
+        ${status.has_cookies ? '✅ 쿠키 파일 있음 (' + status.size + ' bytes)' : '❌ 쿠키 파일 없음'}
+      </span>
+    </div>
+    <input type="file" id="cookieFileInput" accept=".txt" style="display:none;" onchange="uploadCookieFile(this)">
+    <button class="gen-btn primary" onclick="document.getElementById('cookieFileInput').click()">
+      📁 cookies.txt 업로드
+    </button>
+    <span id="cookieUploadStatus" style="margin-left:12px;font-size:0.85em;"></span>
+  `;
+  document.getElementById('modal').classList.add('show');
+}
+
+async function uploadCookieFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const statusEl = document.getElementById('cookieUploadStatus');
+  statusEl.textContent = '⏳ 업로드 중...';
+  statusEl.style.color = 'var(--text-dim)';
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(API + '/api/upload-cookies', {
+      method: 'POST',
+      body: formData
+    });
+    const result = await res.json();
+    if (result.status === 'ok') {
+      statusEl.textContent = '✅ ' + result.message;
+      statusEl.style.color = 'var(--green)';
+      showToast('쿠키 업로드 완료! 이제 전사하기를 다시 시도하세요.', 'success');
+    } else {
+      statusEl.textContent = '❌ ' + (result.error || '업로드 실패');
+      statusEl.style.color = 'var(--red)';
+    }
+  } catch(e) {
+    statusEl.textContent = '❌ 오류: ' + e.message;
+    statusEl.style.color = 'var(--red)';
+  }
 }
 
 // ─── Init ───

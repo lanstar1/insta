@@ -5,10 +5,14 @@ YouTube 영상 전사(Transcription) 모듈
 import os
 import re
 import json
+import logging
 from typing import Optional
+
+logger = logging.getLogger("insta-agent.transcriber")
 
 try:
     from youtube_transcript_api import YouTubeTranscriptApi
+    from youtube_transcript_api.proxies import GenericProxyConfig
     HAS_YT_TRANSCRIPT = True
 except ImportError:
     HAS_YT_TRANSCRIPT = False
@@ -20,6 +24,40 @@ except ImportError:
     HAS_ANTHROPIC = False
 
 CLAUDE_MODEL = "claude-sonnet-4-20250514"
+
+# ─── YouTube API 쿠키/프록시 설정 ───
+# Render 등 클라우드 환경에서 YouTube IP 차단 우회용
+COOKIE_PATH = os.path.join(os.path.dirname(__file__), "data", "cookies.txt")
+PROXY_URL = os.environ.get("YT_PROXY_URL", "")  # e.g. http://user:pass@proxy:port
+
+
+def _build_yt_api():
+    """YouTube Transcript API 인스턴스 생성 (쿠키/프록시 적용)"""
+    kwargs = {}
+
+    # 프록시 설정
+    if PROXY_URL:
+        kwargs["proxy_config"] = GenericProxyConfig(
+            http_url=PROXY_URL,
+            https_url=PROXY_URL,
+        )
+        logger.info(f"[YT] 프록시 사용: {PROXY_URL[:30]}...")
+
+    # 쿠키 설정 (requests Session에 쿠키 로드)
+    if os.path.exists(COOKIE_PATH):
+        try:
+            import requests
+            from http.cookiejar import MozillaCookieJar
+            jar = MozillaCookieJar(COOKIE_PATH)
+            jar.load(ignore_discard=True, ignore_expires=True)
+            session = requests.Session()
+            session.cookies = jar
+            kwargs["http_client"] = session
+            logger.info(f"[YT] 쿠키 로드 완료: {COOKIE_PATH} ({len(jar)}개 쿠키)")
+        except Exception as e:
+            logger.warning(f"[YT] 쿠키 로드 실패: {e}")
+
+    return YouTubeTranscriptApi(**kwargs)
 
 
 def extract_video_id(url: str) -> str:
@@ -49,7 +87,7 @@ def get_transcript(video_url: str) -> dict:
         return {"status": "error", "error": "유효한 YouTube URL이 아닙니다."}
 
     try:
-        ytt_api = YouTubeTranscriptApi()
+        ytt_api = _build_yt_api()
 
         # 사용 가능한 자막 목록 조회
         transcript_list = ytt_api.list(vid)
@@ -134,7 +172,8 @@ def get_transcript(video_url: str) -> dict:
         }
 
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        logger.error(f"[Transcript] video_id={vid} 전사 실패: {type(e).__name__}: {e}")
+        return {"status": "error", "error": f"{type(e).__name__}: {str(e)}"}
 
 
 def analyze_transcript(transcript_text: str, video_title: str = "",
@@ -209,6 +248,7 @@ def analyze_transcript(transcript_text: str, video_title: str = "",
         return {"status": "ok", "engine": "claude", "raw": text}
 
     except Exception as e:
+        logger.error(f"[Analyze] Claude 분석 실패: {type(e).__name__}: {e}")
         return {"status": "error", "error": str(e), "engine": "claude_failed"}
 
 
