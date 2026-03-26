@@ -689,30 +689,44 @@ async def bulk_update_scenes(plan_id: int, data: SceneBulkUpdate):
     return {"message": "Scenes saved", "count": len(data.scenes)}
 
 
-# ─── Media Generation (Background) ───
-# 백그라운드 작업 상태 추적
+# ─── Media Generation (Background via asyncio) ───
 _media_jobs = {}  # plan_id -> {"status": "processing"|"done"|"error", "result": {}, "progress": ""}
 
 
-def _run_media_bg(plan_id: int, content_type: str, scenes: list, api_keys: dict):
-    """백그라운드에서 미디어 파이프라인 실행"""
+def _run_media_sync(plan_id: int, content_type: str, scenes: list, api_keys: dict):
+    """미디어 파이프라인 실행 (sync, to_thread에서 호출됨)"""
+    import sys, traceback
+
     def update_progress(msg):
         _media_jobs[plan_id]["progress"] = msg
 
+    sys.stdout.write(f"[MediaGen-BG] START plan={plan_id} type={content_type} scenes={len(scenes)}\n")
+    sys.stdout.flush()
+
+    result = run_media_pipeline(
+        plan_id=plan_id,
+        content_type=content_type,
+        scenes=scenes,
+        api_keys=api_keys,
+        progress_cb=update_progress
+    )
+
+    result_str = json.dumps(result, ensure_ascii=False, default=str)
+    sys.stdout.write(f"[MediaGen-BG] DONE ({len(result_str)} bytes): {result_str[:500]}\n")
+    sys.stdout.flush()
+
+    return result
+
+
+async def _run_media_bg_async(plan_id: int, content_type: str, scenes: list, api_keys: dict):
+    """asyncio background task로 미디어 생성"""
+    import sys, traceback
     try:
-        _media_jobs[plan_id] = {"status": "processing", "progress": "미디어 생성 시작...", "result": {}}
-        print(f"[MediaGen-BG] START plan={plan_id} type={content_type} scenes={len(scenes)}", flush=True)
+        _media_jobs[plan_id]["progress"] = "파이프라인 실행 중..."
 
-        result = run_media_pipeline(
-            plan_id=plan_id,
-            content_type=content_type,
-            scenes=scenes,
-            api_keys=api_keys,
-            progress_cb=update_progress
+        result = await asyncio.to_thread(
+            _run_media_sync, plan_id, content_type, scenes, api_keys
         )
-
-        result_str = json.dumps(result, ensure_ascii=False, default=str)
-        print(f"[MediaGen-BG] DONE ({len(result_str)} bytes): {result_str[:500]}", flush=True)
 
         # DB 상태 업데이트
         if result.get("status") in ("ok", "placeholder"):
@@ -724,13 +738,16 @@ def _run_media_bg(plan_id: int, content_type: str, scenes: list, api_keys: dict)
                 conn.commit()
                 conn.close()
             except Exception as db_e:
-                print(f"[MediaGen-BG] DB update error: {db_e}", flush=True)
+                sys.stdout.write(f"[MediaGen-BG] DB error: {db_e}\n")
+                sys.stdout.flush()
 
         _media_jobs[plan_id] = {"status": "done", "result": result, "progress": "완료"}
 
     except Exception as e:
-        print(f"[MediaGen-BG] EXCEPTION: {e}", flush=True)
-        _media_jobs[plan_id] = {"status": "error", "result": {"error": str(e)}, "progress": "실패"}
+        tb = traceback.format_exc()
+        sys.stdout.write(f"[MediaGen-BG] EXCEPTION: {e}\n{tb}\n")
+        sys.stdout.flush()
+        _media_jobs[plan_id] = {"status": "error", "result": {"error": str(e)}, "progress": f"실패: {e}"}
 
 
 @app.post("/api/generate-media")
@@ -761,19 +778,16 @@ async def generate_media(req: MediaGenerateRequest):
     # 이미 진행중인 작업 확인
     existing = _media_jobs.get(req.plan_id)
     if existing and existing["status"] == "processing":
-        return {"status": "processing", "message": "이미 생성 중입니다..."}
+        return {"status": "processing", "message": "이미 생성 중입니다...", "progress": existing.get("progress", "")}
 
-    # 백그라운드 스레드로 실행 (즉시 응답)
-    import threading
-    t = threading.Thread(
-        target=_run_media_bg,
-        args=(req.plan_id, plan["content_type"], scenes, req.api_keys or {}),
-        daemon=True
-    )
-    t.start()
-
+    # 상태 먼저 설정 후 백그라운드 태스크 시작
     _media_jobs[req.plan_id] = {"status": "processing", "progress": "시작됨", "result": {}}
-    return {"status": "processing", "message": "미디어 생성이 시작되었습니다. 잠시 후 상태를 확인하세요."}
+    asyncio.create_task(
+        _run_media_bg_async(req.plan_id, plan["content_type"], scenes, req.api_keys or {})
+    )
+
+    print(f"[MediaGen] Background task created for plan={req.plan_id}", flush=True)
+    return {"status": "processing", "message": "미디어 생성이 시작되었습니다."}
 
 
 @app.get("/api/generate-media/{plan_id}/status")
