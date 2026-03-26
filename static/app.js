@@ -320,7 +320,7 @@ function showTranscriptModal(videoId, transcript, analysis) {
     </div>
   `;
 
-  document.getElementById('modal').classList.add('show');
+  document.getElementById('modal').style.display = 'flex';
 }
 
 function showTranscriptTab(tab, btn) {
@@ -1551,7 +1551,7 @@ async function showCookieUpload() {
     </button>
     <span id="cookieUploadStatus" style="margin-left:12px;font-size:0.85em;"></span>
   `;
-  document.getElementById('modal').classList.add('show');
+  document.getElementById('modal').style.display = 'flex';
 }
 
 async function uploadCookieFile(input) {
