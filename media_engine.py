@@ -5,6 +5,7 @@ TTS (ElevenLabs) + Image Gen (FLUX/Together) + Video Gen (MiniMax) + FFmpeg Comp
 import os
 import json
 import time
+import logging
 import subprocess
 import tempfile
 import shutil
@@ -508,9 +509,13 @@ class ReelsCompositor:
                     scene_vid
                 ]
 
-                subprocess.run(cmd, capture_output=True, timeout=30)
+                logging.info(f"[FFmpeg] scene {i+1} cmd: {' '.join(cmd[:6])}...")
+                proc = subprocess.run(cmd, capture_output=True, timeout=30)
+                if proc.returncode != 0:
+                    logging.error(f"[FFmpeg] scene {i+1} failed: {proc.stderr.decode('utf-8', errors='replace')[:500]}")
                 if os.path.exists(scene_vid):
                     scene_videos.append(scene_vid)
+                    logging.info(f"[FFmpeg] scene {i+1} ok: {os.path.getsize(scene_vid)} bytes")
 
             if not scene_videos:
                 return {"error": "씬 영상 생성 실패"}
@@ -668,6 +673,10 @@ def run_media_pipeline(plan_id: int, content_type: str,
     """전체 미디어 파이프라인 실행"""
 
     keys = _resolve_api_keys(api_keys)
+    logging.info(f"[MediaPipeline] plan={plan_id} type={content_type} scenes={len(scenes)} "
+                 f"image_provider={keys.get('image_provider')} "
+                 f"has_elevenlabs={'yes' if keys.get('elevenlabs') else 'no'} "
+                 f"has_together={'yes' if keys.get('together') else 'no'}")
     output_dir = os.path.join(MEDIA_DIR, f"plan_{plan_id}")
     os.makedirs(output_dir, exist_ok=True)
 

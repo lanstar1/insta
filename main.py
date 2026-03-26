@@ -713,13 +713,22 @@ async def generate_media(req: MediaGenerateRequest):
         conn.close()
         raise HTTPException(400, "씬이 없습니다. 먼저 스크립트를 생성하세요.")
 
-    # 미디어 파이프라인 실행
-    result = run_media_pipeline(
-        plan_id=req.plan_id,
-        content_type=plan["content_type"],
-        scenes=scenes,
-        api_keys=req.api_keys or {}
-    )
+    # 미디어 파이프라인 실행 (sync → async wrapper)
+    logging.info(f"[MediaGen] plan_id={req.plan_id} content_type={plan['content_type']} scenes={len(scenes)}")
+    try:
+        result = await asyncio.to_thread(
+            run_media_pipeline,
+            plan_id=req.plan_id,
+            content_type=plan["content_type"],
+            scenes=scenes,
+            api_keys=req.api_keys or {}
+        )
+    except Exception as e:
+        logging.error(f"[MediaGen] pipeline exception: {e}", exc_info=True)
+        conn.close()
+        return {"error": f"미디어 생성 실패: {str(e)}"}
+
+    logging.info(f"[MediaGen] result: {json.dumps(result, ensure_ascii=False, default=str)[:500]}")
 
     # 상태 업데이트
     if result.get("status") in ("ok", "placeholder"):
