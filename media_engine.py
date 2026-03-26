@@ -278,7 +278,7 @@ def _gen_image_openai(prompt: str, output_path: str,
                 "model": "dall-e-3",
                 "prompt": prompt,
                 "size": dalle_size,
-                "quality": "hd",
+                "quality": "standard",
                 "n": 1,
                 "response_format": "b64_json"
             },
@@ -448,8 +448,10 @@ class ReelsCompositor:
         """각 씬에 대한 미디어 에셋 생성"""
         keys = api_keys or {}
         results = []
+        total = len(scenes)
 
         for i, scene in enumerate(scenes):
+            print(f"[Assets] scene {i+1}/{total} 에셋 생성 시작", flush=True)
             scene_result = {"scene_order": scene.get("scene_order", i+1), "assets": {}}
 
             # TTS 생성 (나레이션이 있는 경우)
@@ -707,14 +709,17 @@ def _resolve_api_keys(api_keys: dict) -> dict:
 
 
 def run_media_pipeline(plan_id: int, content_type: str,
-                       scenes: list, api_keys: dict = None) -> dict:
+                       scenes: list, api_keys: dict = None,
+                       progress_cb=None) -> dict:
     """전체 미디어 파이프라인 실행"""
+    def _progress(msg):
+        print(f"[MediaPipeline] {msg}", flush=True)
+        if progress_cb:
+            progress_cb(msg)
 
     keys = _resolve_api_keys(api_keys)
-    print(f"[MediaPipeline] plan={plan_id} type={content_type} scenes={len(scenes)} "
-                 f"image_provider={keys.get('image_provider')} "
-                 f"has_elevenlabs={'yes' if keys.get('elevenlabs') else 'no'} "
-                 f"has_together={'yes' if keys.get('together') else 'no'}")
+    _progress(f"plan={plan_id} type={content_type} scenes={len(scenes)} "
+              f"image_provider={keys.get('image_provider')}")
     output_dir = os.path.join(MEDIA_DIR, f"plan_{plan_id}")
     os.makedirs(output_dir, exist_ok=True)
 
@@ -722,9 +727,11 @@ def run_media_pipeline(plan_id: int, content_type: str,
         compositor = ReelsCompositor(plan_id, output_dir)
 
         # 1. 에셋 생성
+        _progress(f"이미지/TTS 생성 중 ({len(scenes)}씬)...")
         assets = compositor.generate_scene_assets(scenes, keys)
 
         # 2. 합성
+        _progress("영상 합성 중...")
         final_path = os.path.join(output_dir, "final_reels.mp4")
         result = compositor.composite_reels(scenes, assets, final_path)
         result["assets"] = assets

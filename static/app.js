@@ -1083,7 +1083,7 @@ async function startMediaGen(planId) {
 
   mediaState.generating = true;
   const btn = document.getElementById(`mediaBtn-${planId}`);
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ 생성중...'; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 요청중...'; }
 
   const apiKeys = {
     elevenlabs: document.getElementById('keyElevenlabs')?.value || '',
@@ -1095,18 +1095,37 @@ async function startMediaGen(planId) {
   };
 
   try {
-    const result = await api('/api/generate-media', {
+    // 1. 백그라운드 생성 시작 요청 (즉시 응답)
+    const startResult = await api('/api/generate-media', {
       method: 'POST',
       body: { plan_id: planId, api_keys: apiKeys }
     });
+    console.log('[MediaGen] start:', JSON.stringify(startResult));
 
-    console.log('[MediaGen] result:', JSON.stringify(result));
-    if (result.status === 'ok') {
-      showToast(`미디어 생성 완료! (${result.duration || 0}초)`, 'success');
-    } else if (result.status === 'placeholder') {
-      showToast('Placeholder로 생성됨 (API 키 미설정)', 'warn');
+    if (startResult.status === 'processing') {
+      showToast('미디어 생성이 시작되었습니다. 완료까지 2~3분 소요됩니다...', 'success');
+      if (btn) { btn.textContent = '⏳ 생성중... (폴링)'; }
+
+      // 2. 폴링으로 완료 대기
+      const finalResult = await pollMediaStatus(planId, btn);
+      if (finalResult) {
+        if (finalResult.status === 'done') {
+          const r = finalResult.result || {};
+          if (r.status === 'ok') {
+            showToast(`미디어 생성 완료! (${r.duration || 0}초, ${r.scenes || 0}씬)`, 'success');
+          } else if (r.status === 'placeholder') {
+            showToast('Placeholder로 생성됨', 'warn');
+          } else {
+            showToast('생성 완료 (부분 성공): ' + (r.error || ''), 'warn');
+          }
+        } else if (finalResult.status === 'error') {
+          showToast('생성 실패: ' + (finalResult.result?.error || ''), 'error');
+        }
+      }
+    } else if (startResult.status === 'ok') {
+      showToast(`미디어 생성 완료! (${startResult.duration || 0}초)`, 'success');
     } else {
-      showToast('생성 실패: ' + (result.error || JSON.stringify(result)), 'error');
+      showToast('생성 실패: ' + (startResult.error || JSON.stringify(startResult)), 'error');
     }
   } catch (e) {
     console.error('[MediaGen] error:', e);
@@ -1115,6 +1134,26 @@ async function startMediaGen(planId) {
 
   mediaState.generating = false;
   if (btn) { btn.disabled = false; btn.textContent = '🎬 미디어 생성'; }
+}
+
+async function pollMediaStatus(planId, btn) {
+  const maxPolls = 60; // 최대 5분 (5초 간격 × 60)
+  for (let i = 0; i < maxPolls; i++) {
+    await new Promise(r => setTimeout(r, 5000)); // 5초 대기
+    try {
+      const status = await api(`/api/generate-media/${planId}/status`);
+      console.log(`[MediaGen] poll ${i+1}: ${status.status} - ${status.progress || ''}`);
+      if (btn) { btn.textContent = `⏳ ${status.progress || '생성중...'}` ; }
+
+      if (status.status === 'done' || status.status === 'error') {
+        return status;
+      }
+    } catch (e) {
+      console.warn('[MediaGen] poll error:', e);
+    }
+  }
+  showToast('시간 초과 - 서버에서 계속 생성 중일 수 있습니다', 'warn');
+  return null;
 }
 
 async function checkMediaStatus(planId) {

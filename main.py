@@ -689,10 +689,53 @@ async def bulk_update_scenes(plan_id: int, data: SceneBulkUpdate):
     return {"message": "Scenes saved", "count": len(data.scenes)}
 
 
-# ─── Media Generation ───
+# ─── Media Generation (Background) ───
+# 백그라운드 작업 상태 추적
+_media_jobs = {}  # plan_id -> {"status": "processing"|"done"|"error", "result": {}, "progress": ""}
+
+
+def _run_media_bg(plan_id: int, content_type: str, scenes: list, api_keys: dict):
+    """백그라운드에서 미디어 파이프라인 실행"""
+    def update_progress(msg):
+        _media_jobs[plan_id]["progress"] = msg
+
+    try:
+        _media_jobs[plan_id] = {"status": "processing", "progress": "미디어 생성 시작...", "result": {}}
+        print(f"[MediaGen-BG] START plan={plan_id} type={content_type} scenes={len(scenes)}", flush=True)
+
+        result = run_media_pipeline(
+            plan_id=plan_id,
+            content_type=content_type,
+            scenes=scenes,
+            api_keys=api_keys,
+            progress_cb=update_progress
+        )
+
+        result_str = json.dumps(result, ensure_ascii=False, default=str)
+        print(f"[MediaGen-BG] DONE ({len(result_str)} bytes): {result_str[:500]}", flush=True)
+
+        # DB 상태 업데이트
+        if result.get("status") in ("ok", "placeholder"):
+            try:
+                conn = get_db()
+                c = conn.cursor()
+                c.execute("UPDATE content_plans SET status = 'media_gen', updated_at = ? WHERE id = ?",
+                          (datetime.now().isoformat(), plan_id))
+                conn.commit()
+                conn.close()
+            except Exception as db_e:
+                print(f"[MediaGen-BG] DB update error: {db_e}", flush=True)
+
+        _media_jobs[plan_id] = {"status": "done", "result": result, "progress": "완료"}
+
+    except Exception as e:
+        print(f"[MediaGen-BG] EXCEPTION: {e}", flush=True)
+        _media_jobs[plan_id] = {"status": "error", "result": {"error": str(e)}, "progress": "실패"}
+
+
 @app.post("/api/generate-media")
 async def generate_media(req: MediaGenerateRequest):
-    """미디어 파이프라인 실행 (TTS + 이미지 + 영상 + 합성)"""
+    """미디어 파이프라인 백그라운드 실행 시작"""
     conn = get_db()
     c = conn.cursor()
 
@@ -708,40 +751,38 @@ async def generate_media(req: MediaGenerateRequest):
         raise HTTPException(404, "Plan not found")
     plan = dict(plan)
 
-    # 씬 가져오기
     c.execute("SELECT * FROM script_scenes WHERE plan_id = ? ORDER BY scene_order", (req.plan_id,))
     scenes = [dict(r) for r in c.fetchall()]
+    conn.close()
 
     if not scenes:
-        conn.close()
         raise HTTPException(400, "씬이 없습니다. 먼저 스크립트를 생성하세요.")
 
-    # 미디어 파이프라인 실행 (sync → async wrapper)
-    print(f"[MediaGen] START plan_id={req.plan_id} content_type={plan['content_type']} scenes={len(scenes)}", flush=True)
-    try:
-        result = await asyncio.to_thread(
-            run_media_pipeline,
-            plan_id=req.plan_id,
-            content_type=plan["content_type"],
-            scenes=scenes,
-            api_keys=req.api_keys or {}
-        )
-    except Exception as e:
-        print(f"[MediaGen] EXCEPTION: {e}", flush=True)
-        conn.close()
-        return {"error": f"미디어 생성 실패: {str(e)}"}
+    # 이미 진행중인 작업 확인
+    existing = _media_jobs.get(req.plan_id)
+    if existing and existing["status"] == "processing":
+        return {"status": "processing", "message": "이미 생성 중입니다..."}
 
-    result_str = json.dumps(result, ensure_ascii=False, default=str)
-    print(f"[MediaGen] RESULT ({len(result_str)} bytes): {result_str[:500]}", flush=True)
+    # 백그라운드 스레드로 실행 (즉시 응답)
+    import threading
+    t = threading.Thread(
+        target=_run_media_bg,
+        args=(req.plan_id, plan["content_type"], scenes, req.api_keys or {}),
+        daemon=True
+    )
+    t.start()
 
-    # 상태 업데이트
-    if result.get("status") in ("ok", "placeholder"):
-        c.execute("UPDATE content_plans SET status = 'media_gen', updated_at = ? WHERE id = ?",
-                  (datetime.now().isoformat(), req.plan_id))
-        conn.commit()
+    _media_jobs[req.plan_id] = {"status": "processing", "progress": "시작됨", "result": {}}
+    return {"status": "processing", "message": "미디어 생성이 시작되었습니다. 잠시 후 상태를 확인하세요."}
 
-    conn.close()
-    return result
+
+@app.get("/api/generate-media/{plan_id}/status")
+async def media_gen_status(plan_id: int):
+    """미디어 생성 진행 상태 확인 (폴링용)"""
+    job = _media_jobs.get(plan_id)
+    if not job:
+        return {"status": "not_started"}
+    return job
 
 
 @app.post("/api/tts-preview")
