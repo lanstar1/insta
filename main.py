@@ -106,6 +106,11 @@ class AnalyzeRequest(BaseModel):
     api_key: Optional[str] = None
 
 
+class ManualTranscriptRequest(BaseModel):
+    transcript: str
+    api_key: Optional[str] = None
+
+
 # ─── Root ───
 @app.head("/")
 async def root_head():
@@ -360,6 +365,54 @@ async def transcribe_video(video_id: int, req: TranscribeRequest = None):
         "duration_sec": result.get("duration_sec", 0),
         "word_count": result.get("word_count", 0),
         "segment_count": result.get("segment_count", 0),
+    }
+
+
+@app.post("/api/videos/{video_id}/transcribe-manual")
+async def transcribe_manual(video_id: int, req: ManualTranscriptRequest):
+    """수동으로 전사 텍스트 입력 (YouTube IP 차단 우회용)"""
+    if not req.transcript or not req.transcript.strip():
+        return {"status": "error", "error": "전사 텍스트가 비어있습니다."}
+
+    conn = get_db()
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
+    video = c.fetchone()
+    if not video:
+        conn.close()
+        raise HTTPException(404, "Video not found")
+
+    video = dict(video)
+    transcript_text = req.transcript.strip()
+
+    # Claude 분석
+    api_key = req.api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+    try:
+        analysis = await asyncio.to_thread(
+            analyze_transcript,
+            transcript_text,
+            video.get("title", ""),
+            video.get("topic", ""),
+            api_key
+        )
+    except Exception as e:
+        logger.error(f"[ManualTranscribe] 분석 예외: {e}")
+        analysis = {"status": "error", "error": str(e), "engine": "failed"}
+
+    # DB 저장
+    analysis_json = json.dumps(analysis, ensure_ascii=False) if analysis else None
+    c.execute("UPDATE videos SET transcript = ?, transcript_analysis = ? WHERE id = ?",
+              (transcript_text, analysis_json, video_id))
+    conn.commit()
+    conn.close()
+
+    logger.warning(f"[ManualTranscribe] video_id={video_id} 수동 전사 저장: {len(transcript_text)}자")
+    return {
+        "status": "ok",
+        "transcript": transcript_text,
+        "analysis": analysis,
+        "word_count": len(transcript_text),
     }
 
 

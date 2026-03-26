@@ -250,8 +250,8 @@ async function transcribeVideo(videoId) {
       if (currentPage === 'ideas') loadIdeas(state.videos.page);
     } else {
       const err = result.error || '자막 없음';
-      if (err.includes('blocking') || err.includes('cloud provider') || err.includes('IP')) {
-        showToast('YouTube IP 차단! 좌측 하단 🍪쿠키 설정을 해주세요.', 'error');
+      if (err.includes('block') || err.includes('cloud') || err.includes('IP') || err.includes('bot')) {
+        showManualTranscriptModal(videoId);
       } else {
         showToast('전사 실패: ' + err, 'error');
       }
@@ -1577,6 +1577,68 @@ async function uploadCookieFile(input) {
       statusEl.style.color = 'var(--red)';
     }
   } catch(e) {
+    statusEl.textContent = '❌ 오류: ' + e.message;
+    statusEl.style.color = 'var(--red)';
+  }
+}
+
+// ─── Manual Transcript Paste ───
+function showManualTranscriptModal(videoId) {
+  const mc = document.getElementById('modalContent');
+  mc.innerHTML = `
+    <h3 style="margin-bottom:12px;">📝 자막 직접 입력</h3>
+    <p style="color:var(--text-dim);font-size:0.9em;line-height:1.6;margin-bottom:12px;">
+      YouTube가 서버 IP를 차단하여 자동 전사가 불가합니다.<br>
+      아래 방법으로 자막을 복사하여 붙여넣어 주세요.
+    </p>
+    <div style="background:var(--bg-dark);padding:12px;border-radius:8px;margin-bottom:16px;font-size:0.85em;line-height:1.7;">
+      <strong>자막 복사 방법:</strong><br>
+      1. YouTube 영상 페이지에서 영상 아래 <strong>"...더보기"</strong> 클릭<br>
+      2. <strong>"스크립트 표시"</strong> 클릭<br>
+      3. 나타난 자막 전체를 <strong>Ctrl+A → Ctrl+C</strong>로 복사<br>
+      4. 아래 입력창에 <strong>Ctrl+V</strong>로 붙여넣기
+    </div>
+    <textarea id="manualTranscriptInput" placeholder="여기에 자막 텍스트를 붙여넣으세요..."
+      style="width:100%;min-height:200px;background:var(--bg-dark);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:0.9em;resize:vertical;font-family:inherit;"></textarea>
+    <div style="display:flex;gap:8px;margin-top:12px;align-items:center;">
+      <button class="gen-btn primary" onclick="submitManualTranscript(${videoId})">✅ 저장 및 분석</button>
+      <button class="btn btn-secondary" onclick="closeModal()">취소</button>
+      <span id="manualTranscriptStatus" style="font-size:0.85em;margin-left:8px;"></span>
+    </div>
+  `;
+  document.getElementById('modal').style.display = 'flex';
+}
+
+async function submitManualTranscript(videoId) {
+  const textarea = document.getElementById('manualTranscriptInput');
+  const text = textarea.value.trim();
+  if (!text) {
+    showToast('자막 텍스트를 입력해주세요.', 'error');
+    return;
+  }
+
+  // 타임스탬프 제거 (YouTube 스크립트에서 복사하면 타임스탬프가 포함됨)
+  const cleaned = text.replace(/^\d{1,2}:\d{2}(:\d{2})?\s*/gm, '').replace(/\n{2,}/g, '\n').trim();
+
+  const statusEl = document.getElementById('manualTranscriptStatus');
+  statusEl.textContent = '⏳ 저장 및 분석 중...';
+  statusEl.style.color = 'var(--text-dim)';
+
+  try {
+    const result = await api(`/api/videos/${videoId}/transcribe-manual`, {
+      method: 'POST',
+      body: { transcript: cleaned }
+    });
+
+    if (result.status === 'ok') {
+      showToast(`전사 완료! (${result.word_count}자)`, 'success');
+      showTranscriptModal(videoId, result.transcript, result.analysis);
+      if (currentPage === 'ideas') loadIdeas(state.videos.page);
+    } else {
+      statusEl.textContent = '❌ ' + (result.error || '저장 실패');
+      statusEl.style.color = 'var(--red)';
+    }
+  } catch (e) {
     statusEl.textContent = '❌ 오류: ' + e.message;
     statusEl.style.color = 'var(--red)';
   }
