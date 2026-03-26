@@ -202,8 +202,9 @@ async function loadIdeas(page = 1) {
 
 function videoCardHTML(v) {
   const hasTranscript = v.transcript && v.transcript.length > 0;
+  const urlAttr = v.url ? `data-url="${escHTML(v.url)}"` : '';
   return `
-    <div class="video-card">
+    <div class="video-card" ${urlAttr}>
       <div class="vc-body">
         <div class="vc-title">${escHTML(v.title)}</div>
         <div class="vc-meta">
@@ -214,7 +215,7 @@ function videoCardHTML(v) {
           ${hasTranscript ? '<span class="vc-transcribed">📝 전사완료</span>' : ''}
         </div>
         <div class="vc-actions">
-          <button class="vc-btn transcribe ${hasTranscript ? 'done' : ''}" onclick="event.stopPropagation();transcribeVideo(${v.id})">${hasTranscript ? '📝 분석보기' : '🎙 전사하기'}</button>
+          <button class="vc-btn transcribe ${hasTranscript ? 'done' : ''}" onclick="event.stopPropagation();transcribeVideo(${v.id}, '${escHTML(v.url || '')}')">${hasTranscript ? '📝 분석보기' : '🎙 전사하기'}</button>
           <button class="vc-btn reels" onclick="event.stopPropagation();openCreatePlan(${v.id},'reels')">릴스</button>
           <button class="vc-btn card" onclick="event.stopPropagation();openCreatePlan(${v.id},'card_news')">카드뉴스</button>
           <button class="vc-btn story" onclick="event.stopPropagation();openCreatePlan(${v.id},'story')">스토리</button>
@@ -225,42 +226,19 @@ function videoCardHTML(v) {
 }
 
 // ─── 전사 & 분석 ───
-async function transcribeVideo(videoId) {
-  // 먼저 기존 전사 결과 확인
+async function transcribeVideo(videoId, videoUrl) {
+  // 기존 전사 결과 확인
   const existing = await api(`/api/videos/${videoId}/transcript`);
   if (existing.has_transcript) {
     showTranscriptModal(videoId, existing.transcript, existing.analysis);
     return;
   }
 
-  // 전사 실행
-  const btn = event?.target;
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ 전사중...'; }
-
-  try {
-    const result = await api(`/api/videos/${videoId}/transcribe`, {
-      method: 'POST',
-      body: {}
-    });
-
-    if (result.status === 'ok' || result.status === 'cached') {
-      showToast(`전사 완료! (${result.word_count}자)`, 'success');
-      showTranscriptModal(videoId, result.transcript, result.analysis);
-      // 카드 업데이트
-      if (currentPage === 'ideas') loadIdeas(state.videos.page);
-    } else {
-      const err = result.error || '자막 없음';
-      if (err.includes('block') || err.includes('cloud') || err.includes('IP') || err.includes('bot')) {
-        showManualTranscriptModal(videoId);
-      } else {
-        showToast('전사 실패: ' + err, 'error');
-      }
-    }
-  } catch (e) {
-    showToast('전사 오류: ' + e.message, 'error');
+  // YouTube 영상 새 탭으로 열고 수동 입력 모달 표시
+  if (videoUrl) {
+    window.open(videoUrl, '_blank');
   }
-
-  if (btn) { btn.disabled = false; btn.textContent = '🎙 전사하기'; }
+  showManualTranscriptModal(videoId);
 }
 
 function showTranscriptModal(videoId, transcript, analysis) {
@@ -1523,80 +1501,21 @@ function paginationHTML(current, total, fn) {
   return html;
 }
 
-// ─── Cookie Upload ───
-async function showCookieUpload() {
-  const status = await api('/api/cookie-status');
-  const mc = document.getElementById('modalContent');
-  mc.innerHTML = `
-    <h3 style="margin-bottom:12px;">🍪 YouTube 쿠키 설정</h3>
-    <p style="color:var(--text-dim);font-size:0.9em;line-height:1.6;margin-bottom:16px;">
-      Render(클라우드)에서는 YouTube가 IP를 차단하여 자막을 가져올 수 없습니다.<br>
-      브라우저에서 YouTube 쿠키를 내보내 업로드하면 전사 기능이 정상 작동합니다.
-    </p>
-    <div style="background:var(--bg-dark);padding:12px;border-radius:8px;margin-bottom:16px;font-size:0.85em;line-height:1.7;">
-      <strong>쿠키 내보내기 방법:</strong><br>
-      1. Chrome에서 <a href="https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc" target="_blank" style="color:var(--primary);">Get cookies.txt LOCALLY</a> 확장 프로그램 설치<br>
-      2. <a href="https://www.youtube.com" target="_blank" style="color:var(--primary);">youtube.com</a> 접속 후 로그인 상태 확인<br>
-      3. 확장 프로그램 아이콘 클릭 → "Export" → cookies.txt 다운로드<br>
-      4. 아래에서 해당 파일 업로드
-    </div>
-    <div style="margin-bottom:12px;">
-      <span style="font-size:0.85em;color:${status.has_cookies ? 'var(--green)' : 'var(--text-dim)'};">
-        ${status.has_cookies ? '✅ 쿠키 파일 있음 (' + status.size + ' bytes)' : '❌ 쿠키 파일 없음'}
-      </span>
-    </div>
-    <input type="file" id="cookieFileInput" accept=".txt" style="display:none;" onchange="uploadCookieFile(this)">
-    <button class="gen-btn primary" onclick="document.getElementById('cookieFileInput').click()">
-      📁 cookies.txt 업로드
-    </button>
-    <span id="cookieUploadStatus" style="margin-left:12px;font-size:0.85em;"></span>
-  `;
-  document.getElementById('modal').style.display = 'flex';
-}
-
-async function uploadCookieFile(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const statusEl = document.getElementById('cookieUploadStatus');
-  statusEl.textContent = '⏳ 업로드 중...';
-  statusEl.style.color = 'var(--text-dim)';
-  try {
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await fetch(API + '/api/upload-cookies', {
-      method: 'POST',
-      body: formData
-    });
-    const result = await res.json();
-    if (result.status === 'ok') {
-      statusEl.textContent = '✅ ' + result.message;
-      statusEl.style.color = 'var(--green)';
-      showToast('쿠키 업로드 완료! 이제 전사하기를 다시 시도하세요.', 'success');
-    } else {
-      statusEl.textContent = '❌ ' + (result.error || '업로드 실패');
-      statusEl.style.color = 'var(--red)';
-    }
-  } catch(e) {
-    statusEl.textContent = '❌ 오류: ' + e.message;
-    statusEl.style.color = 'var(--red)';
-  }
-}
-
 // ─── Manual Transcript Paste ───
 function showManualTranscriptModal(videoId) {
   const mc = document.getElementById('modalContent');
   mc.innerHTML = `
-    <h3 style="margin-bottom:12px;">📝 자막 직접 입력</h3>
+    <h3 style="margin-bottom:12px;">📝 자막 입력</h3>
     <p style="color:var(--text-dim);font-size:0.9em;line-height:1.6;margin-bottom:12px;">
-      YouTube가 서버 IP를 차단하여 자동 전사가 불가합니다.<br>
+      YouTube 영상이 새 탭에서 열렸습니다.<br>
       아래 방법으로 자막을 복사하여 붙여넣어 주세요.
     </p>
     <div style="background:var(--bg-dark);padding:12px;border-radius:8px;margin-bottom:16px;font-size:0.85em;line-height:1.7;">
       <strong>자막 복사 방법:</strong><br>
-      1. YouTube 영상 페이지에서 영상 아래 <strong>"...더보기"</strong> 클릭<br>
+      1. 열린 YouTube 영상 아래 <strong>"...더보기"</strong> 클릭<br>
       2. <strong>"스크립트 표시"</strong> 클릭<br>
-      3. 나타난 자막 전체를 <strong>Ctrl+A → Ctrl+C</strong>로 복사<br>
-      4. 아래 입력창에 <strong>Ctrl+V</strong>로 붙여넣기
+      3. 자막 전체를 <strong>Ctrl+A → Ctrl+C</strong> (Mac: ⌘A → ⌘C) 복사<br>
+      4. 아래 입력창에 <strong>붙여넣기</strong>
     </div>
     <textarea id="manualTranscriptInput" placeholder="여기에 자막 텍스트를 붙여넣으세요..."
       style="width:100%;min-height:200px;background:var(--bg-dark);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:0.9em;resize:vertical;font-family:inherit;"></textarea>

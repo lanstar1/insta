@@ -3,7 +3,7 @@ LANstar Instagram Automation Agent
 Phase 1: Foundation + Idea Bank
 FastAPI Backend
 """
-from fastapi import FastAPI, HTTPException, Query, UploadFile, File
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse
 from pydantic import BaseModel
@@ -20,7 +20,7 @@ from database import get_db, init_db
 from script_engine import generate_script_claude, generate_script_fallback, check_spelling
 from media_engine import run_media_pipeline, generate_tts, MEDIA_DIR
 from instagram_api import InstagramClient, ScheduleManager
-from transcriber import get_transcript, analyze_transcript
+from transcriber import analyze_transcript
 
 app = FastAPI(title="LANstar Insta Agent", version="0.2.0")
 
@@ -96,10 +96,6 @@ class ScheduleCreateRequest(BaseModel):
 class ScheduleSuggestRequest(BaseModel):
     count: int = 7
     start_date: Optional[str] = None
-
-
-class TranscribeRequest(BaseModel):
-    api_key: Optional[str] = None  # Claude API key for analysis
 
 
 class AnalyzeRequest(BaseModel):
@@ -250,123 +246,6 @@ async def get_stats():
 
 
 # ─── 전사 & 분석 (Transcription & Analysis) ───
-
-@app.post("/api/upload-cookies")
-async def upload_cookies(file: UploadFile = File(...)):
-    """YouTube 쿠키 파일 업로드 (Netscape/Mozilla 형식 cookies.txt)"""
-    cookie_path = os.path.join(os.path.dirname(__file__), "data", "cookies.txt")
-    try:
-        content = await file.read()
-        text = content.decode("utf-8", errors="ignore")
-
-        # 기본 검증: Netscape 쿠키 형식인지 확인
-        lines = [l for l in text.strip().split("\n") if l and not l.startswith("#")]
-        if not lines:
-            return {"status": "error", "error": "빈 파일이거나 유효한 쿠키가 없습니다."}
-
-        with open(cookie_path, "w") as f:
-            # Netscape 형식 헤더 추가
-            if not text.startswith("# Netscape HTTP Cookie File"):
-                f.write("# Netscape HTTP Cookie File\n")
-            f.write(text)
-
-        logger.info(f"[Cookies] 쿠키 업로드 완료: {len(lines)}줄")
-        return {"status": "ok", "message": f"쿠키 파일 저장 완료 ({len(lines)}개 항목)"}
-    except Exception as e:
-        logger.error(f"[Cookies] 업로드 실패: {e}")
-        return {"status": "error", "error": str(e)}
-
-
-@app.get("/api/cookie-status")
-async def cookie_status():
-    """쿠키 파일 존재 여부 확인"""
-    cookie_path = os.path.join(os.path.dirname(__file__), "data", "cookies.txt")
-    exists = os.path.exists(cookie_path)
-    size = os.path.getsize(cookie_path) if exists else 0
-    return {"has_cookies": exists and size > 0, "size": size}
-
-
-@app.post("/api/videos/{video_id}/transcribe")
-async def transcribe_video(video_id: int, req: TranscribeRequest = None):
-    """유튜브 영상 자막 전사 + Claude 분석"""
-    conn = get_db()
-    c = conn.cursor()
-
-    c.execute("SELECT * FROM videos WHERE id = ?", (video_id,))
-    video = c.fetchone()
-    if not video:
-        conn.close()
-        raise HTTPException(404, "Video not found")
-
-    video = dict(video)
-
-    # 이미 전사된 경우 캐시 반환
-    if video.get("transcript"):
-        analysis = None
-        if video.get("transcript_analysis"):
-            try:
-                analysis = json.loads(video["transcript_analysis"])
-            except Exception:
-                analysis = None
-        conn.close()
-        return {
-            "status": "cached",
-            "transcript": video["transcript"],
-            "analysis": analysis,
-            "word_count": len(video["transcript"]),
-        }
-
-    # 전사 실행 (비동기 스레드에서 실행하여 이벤트 루프 블로킹 방지)
-    url = video.get("url", "")
-    logger.info(f"[Transcribe] video_id={video_id} url={url} 전사 시작")
-
-    try:
-        result = await asyncio.to_thread(get_transcript, url)
-    except Exception as e:
-        logger.error(f"[Transcribe] video_id={video_id} get_transcript 예외: {e}")
-        conn.close()
-        return {"status": "error", "error": f"전사 실행 중 오류: {str(e)}"}
-
-    if result.get("status") != "ok":
-        logger.warning(f"[Transcribe] video_id={video_id} 전사 실패: {result.get('error', 'unknown')}")
-        conn.close()
-        return result
-
-    transcript_text = result["transcript"]
-    logger.info(f"[Transcribe] video_id={video_id} 전사 성공: {len(transcript_text)}자, {result.get('segment_count', 0)}세그먼트")
-
-    # Claude 분석 (API 키 있을 때, 비동기 스레드에서 실행)
-    api_key = (req.api_key if req else None) or os.environ.get("ANTHROPIC_API_KEY", "")
-    try:
-        analysis = await asyncio.to_thread(
-            analyze_transcript,
-            transcript_text,
-            video.get("title", ""),
-            video.get("topic", ""),
-            api_key
-        )
-        logger.info(f"[Transcribe] video_id={video_id} 분석 완료: engine={analysis.get('engine', 'unknown')}")
-    except Exception as e:
-        logger.error(f"[Transcribe] video_id={video_id} 분석 예외: {e}")
-        analysis = {"status": "error", "error": str(e), "engine": "failed"}
-
-    # DB 저장
-    analysis_json = json.dumps(analysis, ensure_ascii=False) if analysis else None
-    c.execute("UPDATE videos SET transcript = ?, transcript_analysis = ? WHERE id = ?",
-              (transcript_text, analysis_json, video_id))
-    conn.commit()
-    conn.close()
-
-    return {
-        "status": "ok",
-        "transcript": transcript_text,
-        "analysis": analysis,
-        "language": result.get("language", ""),
-        "duration_sec": result.get("duration_sec", 0),
-        "word_count": result.get("word_count", 0),
-        "segment_count": result.get("segment_count", 0),
-    }
-
 
 @app.post("/api/videos/{video_id}/transcribe-manual")
 async def transcribe_manual(video_id: int, req: ManualTranscriptRequest):

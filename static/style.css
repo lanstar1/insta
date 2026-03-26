@@ -63,13 +63,6 @@ body {
 }
 .sf-label { color: var(--text); font-weight: 600; }
 .sf-sub { color: var(--text-dim); margin-top: 2px; }
-.cookie-btn {
-  margin-top: 8px; padding: 4px 10px; font-size: 0.85em;
-  background: var(--bg-dark); color: var(--text-dim); border: 1px solid var(--border);
-  border-radius: 6px; cursor: pointer; transition: all 0.2s;
-}
-.cookie-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
-
 /* ─── Main ─── */
 #main {
   flex: 1;
