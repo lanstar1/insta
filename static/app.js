@@ -1172,12 +1172,18 @@ async function checkMediaStatus(planId) {
         </span>
       </div>
       ${result.files?.length ? `
+        ${result.files.find(f => f.type === 'mp4' && f.name.includes('final')) ? `
+          <div style="margin-bottom:16px;">
+            <video controls style="width:100%;max-height:400px;border-radius:8px;background:#000;" src="${result.files.find(f => f.type === 'mp4' && f.name.includes('final')).url}"></video>
+          </div>
+        ` : ''}
         <div style="display:flex;flex-direction:column;gap:6px;">
           ${result.files.map(f => `
             <div style="background:var(--surface2);border-radius:8px;padding:10px;display:flex;align-items:center;gap:8px;">
               <span style="font-size:1.2em;">${f.type === 'mp4' ? '🎬' : f.type === 'wav' ? '🎤' : f.type === 'png' ? '🖼️' : '📄'}</span>
               <span style="flex:1;font-size:0.85em;">${f.name}</span>
               <span style="font-size:0.72em;color:var(--text-dim);">${(f.size/1024).toFixed(1)}KB</span>
+              <a href="${f.url}" target="_blank" download="${f.name}" style="color:var(--accent);font-size:0.8em;text-decoration:none;">⬇ 다운로드</a>
             </div>
           `).join('')}
         </div>

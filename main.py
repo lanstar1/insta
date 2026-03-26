@@ -819,9 +819,12 @@ async def get_media_status(plan_id: int):
     for root, dirs, fnames in os.walk(plan_dir):
         for fn in fnames:
             fp = os.path.join(root, fn)
+            # /app/media/plan_2/xxx.mp4 → /media/plan_2/xxx.mp4
+            rel_path = os.path.relpath(fp, MEDIA_DIR)
             files.append({
                 "name": fn,
                 "path": fp,
+                "url": f"/media/{rel_path}",
                 "size": os.path.getsize(fp),
                 "type": fn.split('.')[-1] if '.' in fn else 'unknown'
             })
