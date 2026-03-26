@@ -12,6 +12,7 @@ import json
 import os
 import asyncio
 import logging
+import subprocess
 from datetime import datetime
 
 logger = logging.getLogger("insta-agent")
@@ -768,6 +769,56 @@ async def get_media_status(plan_id: int):
             })
 
     return {"status": "generated", "files": files, "dir": plan_dir}
+
+
+# ─── Media Debug ───
+@app.get("/api/debug/media-test/{plan_id}")
+async def debug_media_test(plan_id: int):
+    """미디어 파이프라인 디버그용 - 환경/에러 확인"""
+    import shutil
+    info = {
+        "ffmpeg": shutil.which("ffmpeg") is not None,
+        "ffprobe": shutil.which("ffprobe") is not None,
+        "media_dir": MEDIA_DIR,
+        "media_dir_exists": os.path.exists(MEDIA_DIR),
+    }
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM content_plans WHERE id = ?", (plan_id,))
+    plan = c.fetchone()
+    if plan:
+        plan = dict(plan)
+        info["plan"] = {"id": plan["id"], "content_type": plan.get("content_type"), "status": plan.get("status")}
+
+    c.execute("SELECT * FROM script_scenes WHERE plan_id = ? ORDER BY scene_order", (plan_id,))
+    scenes = [dict(r) for r in c.fetchall()]
+    info["scene_count"] = len(scenes)
+    if scenes:
+        info["first_scene_keys"] = list(scenes[0].keys())
+        info["first_scene_preview"] = {k: str(v)[:80] for k, v in scenes[0].items()}
+
+    # env keys check
+    info["env_keys"] = {
+        "ELEVENLABS_API_KEY": bool(os.environ.get("ELEVENLABS_API_KEY")),
+        "TOGETHER_API_KEY": bool(os.environ.get("TOGETHER_API_KEY")),
+        "OPENAI_API_KEY": bool(os.environ.get("OPENAI_API_KEY")),
+        "MINIMAX_API_KEY": bool(os.environ.get("MINIMAX_API_KEY")),
+    }
+
+    # Try quick FFmpeg test
+    try:
+        proc = subprocess.run(
+            ["ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=black:s=100x100:d=0.1",
+             "-frames:v", "1", os.path.join(MEDIA_DIR, "test.png")],
+            capture_output=True, timeout=5
+        )
+        info["ffmpeg_test"] = "ok" if proc.returncode == 0 else proc.stderr.decode('utf-8', errors='replace')[:300]
+    except Exception as e:
+        info["ffmpeg_test"] = str(e)
+
+    conn.close()
+    return info
 
 
 # Serve media files

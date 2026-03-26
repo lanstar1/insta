@@ -52,6 +52,20 @@ def _drawtext_font_opt():
     return f":fontfile='{fp}'" if fp else ""
 
 
+def _escape_drawtext(text: str) -> str:
+    """FFmpeg drawtext 필터용 텍스트 이스케이프.
+    콜론, 백슬래시, 따옴표, 세미콜론 등 특수문자를 이스케이프한다."""
+    # Remove characters that can't be easily escaped
+    text = text.replace("'", "").replace('"', '').replace('\n', ' ')
+    # FFmpeg drawtext special chars: \ : '  need escaping with backslash
+    text = text.replace('\\', '\\\\')
+    text = text.replace(':', '\\:')
+    text = text.replace(';', '\\;')
+    # Also escape % which is special in drawtext (used for time codes)
+    text = text.replace('%', '%%')
+    return text
+
+
 # ═══════════════════════════════════════════
 # TTS Engine (ElevenLabs)
 # ═══════════════════════════════════════════
@@ -273,10 +287,10 @@ def _gen_image_placeholder(prompt: str, output_path: str,
                            width: int = 1080, height: int = 1920) -> dict:
     """API 없을 때 FFmpeg로 단색+텍스트 placeholder 이미지 생성"""
     try:
-        # 텍스트를 짧게
-        short = prompt[:60] if len(prompt) > 60 else prompt
+        short = _escape_drawtext(prompt[:50])
+        logging.info(f"[Placeholder] generating {width}x{height} text='{short[:30]}...'")
 
-        subprocess.run([
+        proc = subprocess.run([
             "ffmpeg", "-y",
             "-f", "lavfi",
             "-i", f"color=c=0x1a1a28:s={width}x{height}:d=1",
@@ -286,10 +300,13 @@ def _gen_image_placeholder(prompt: str, output_path: str,
             output_path
         ], capture_output=True, timeout=10)
 
+        if proc.returncode != 0:
+            logging.error(f"[Placeholder] ffmpeg failed: {proc.stderr.decode('utf-8', errors='replace')[:300]}")
+
         if os.path.exists(output_path):
             return {"status": "placeholder", "path": output_path, "engine": "ffmpeg"}
-    except Exception:
-        pass
+    except Exception as e:
+        logging.error(f"[Placeholder] exception: {e}")
 
     return {"error": "Placeholder 이미지 생성 실패"}
 
@@ -473,7 +490,7 @@ class ReelsCompositor:
 
                 # 텍스트 오버레이
                 text = scene.get("text_overlay", "")
-                text_clean = text.replace("'", "").replace('"', '').replace('\n', ' ')
+                text_clean = _escape_drawtext(text)
 
                 # FFmpeg 씬 영상 생성
                 cmd = ["ffmpeg", "-y"]
@@ -616,7 +633,7 @@ def _build_card_prompt(slide: dict, idx: int) -> str:
 def _gen_card_placeholder(slide: dict, output_path: str, idx: int) -> dict:
     """Pillow or FFmpeg로 카드뉴스 placeholder"""
     text = (slide.get("text_overlay") or f"Slide {idx+1}")[:50]
-    text_clean = text.replace("'", "").replace('"', '').replace('\n', ' ')
+    text_clean = _escape_drawtext(text)
 
     try:
         subprocess.run([
