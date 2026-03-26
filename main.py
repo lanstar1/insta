@@ -15,6 +15,8 @@ import logging
 import subprocess
 from datetime import datetime
 
+# 로깅 레벨 설정 - INFO 이상 출력
+logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
 logger = logging.getLogger("insta-agent")
 
 from database import get_db, init_db
@@ -715,7 +717,7 @@ async def generate_media(req: MediaGenerateRequest):
         raise HTTPException(400, "씬이 없습니다. 먼저 스크립트를 생성하세요.")
 
     # 미디어 파이프라인 실행 (sync → async wrapper)
-    logging.info(f"[MediaGen] plan_id={req.plan_id} content_type={plan['content_type']} scenes={len(scenes)}")
+    print(f"[MediaGen] START plan_id={req.plan_id} content_type={plan['content_type']} scenes={len(scenes)}", flush=True)
     try:
         result = await asyncio.to_thread(
             run_media_pipeline,
@@ -725,11 +727,12 @@ async def generate_media(req: MediaGenerateRequest):
             api_keys=req.api_keys or {}
         )
     except Exception as e:
-        logging.error(f"[MediaGen] pipeline exception: {e}", exc_info=True)
+        print(f"[MediaGen] EXCEPTION: {e}", flush=True)
         conn.close()
         return {"error": f"미디어 생성 실패: {str(e)}"}
 
-    logging.info(f"[MediaGen] result: {json.dumps(result, ensure_ascii=False, default=str)[:500]}")
+    result_str = json.dumps(result, ensure_ascii=False, default=str)
+    print(f"[MediaGen] RESULT ({len(result_str)} bytes): {result_str[:500]}", flush=True)
 
     # 상태 업데이트
     if result.get("status") in ("ok", "placeholder"):

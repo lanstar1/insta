@@ -237,11 +237,11 @@ def _gen_image_together(prompt: str, output_path: str,
                 f.write(img_data)
             return {"status": "ok", "path": output_path, "engine": "flux_1.1_pro"}
         else:
-            logging.error(f"[Together] failed {resp.status_code}: {resp.text[:300]}")
+            print(f"[Together] failed {resp.status_code}: {resp.text[:300]}")
             return _gen_image_placeholder(prompt, output_path, width, height)
 
     except Exception as e:
-        logging.error(f"[Together] exception: {e}")
+        print(f"[Together] exception: {e}")
         return _gen_image_placeholder(prompt, output_path, width, height)
 
 
@@ -265,7 +265,7 @@ def _gen_image_openai(prompt: str, output_path: str,
         return _gen_image_placeholder(prompt, output_path, width, height)
 
     dalle_size = _dalle_size(width, height)
-    logging.info(f"[DALL-E] requested {width}x{height} → using {dalle_size}")
+    print(f"[DALL-E] requested {width}x{height} → using {dalle_size}")
 
     try:
         resp = requests.post(
@@ -291,16 +291,16 @@ def _gen_image_openai(prompt: str, output_path: str,
             img_data = base64.b64decode(data["data"][0]["b64_json"])
             with open(output_path, 'wb') as f:
                 f.write(img_data)
-            logging.info(f"[DALL-E] success: {os.path.getsize(output_path)} bytes")
+            print(f"[DALL-E] success: {os.path.getsize(output_path)} bytes")
             return {"status": "ok", "path": output_path, "engine": "dall-e-3"}
         else:
             err_detail = resp.text[:300] if resp.text else ""
-            logging.error(f"[DALL-E] failed {resp.status_code}: {err_detail}")
+            print(f"[DALL-E] failed {resp.status_code}: {err_detail}")
             # API 실패 시 placeholder로 fallback
             return _gen_image_placeholder(prompt, output_path, width, height)
 
     except Exception as e:
-        logging.error(f"[DALL-E] exception: {e}")
+        print(f"[DALL-E] exception: {e}")
         return _gen_image_placeholder(prompt, output_path, width, height)
 
 
@@ -309,7 +309,7 @@ def _gen_image_placeholder(prompt: str, output_path: str,
     """API 없을 때 FFmpeg로 단색+텍스트 placeholder 이미지 생성"""
     try:
         short = _escape_drawtext(prompt[:50])
-        logging.info(f"[Placeholder] generating {width}x{height} text='{short[:30]}...'")
+        print(f"[Placeholder] generating {width}x{height} text='{short[:30]}...'")
 
         proc = subprocess.run([
             "ffmpeg", "-y",
@@ -322,12 +322,12 @@ def _gen_image_placeholder(prompt: str, output_path: str,
         ], capture_output=True, timeout=10)
 
         if proc.returncode != 0:
-            logging.error(f"[Placeholder] ffmpeg failed: {proc.stderr.decode('utf-8', errors='replace')[:300]}")
+            print(f"[Placeholder] ffmpeg failed: {proc.stderr.decode('utf-8', errors='replace')[:300]}")
 
         if os.path.exists(output_path):
             return {"status": "placeholder", "path": output_path, "engine": "ffmpeg"}
     except Exception as e:
-        logging.error(f"[Placeholder] exception: {e}")
+        print(f"[Placeholder] exception: {e}")
 
     return {"error": "Placeholder 이미지 생성 실패"}
 
@@ -547,13 +547,13 @@ class ReelsCompositor:
                     scene_vid
                 ]
 
-                logging.info(f"[FFmpeg] scene {i+1} cmd: {' '.join(cmd[:6])}...")
+                print(f"[FFmpeg] scene {i+1} cmd: {' '.join(cmd[:6])}...")
                 proc = subprocess.run(cmd, capture_output=True, timeout=30)
                 if proc.returncode != 0:
-                    logging.error(f"[FFmpeg] scene {i+1} failed: {proc.stderr.decode('utf-8', errors='replace')[:500]}")
+                    print(f"[FFmpeg] scene {i+1} failed: {proc.stderr.decode('utf-8', errors='replace')[:500]}")
                 if os.path.exists(scene_vid):
                     scene_videos.append(scene_vid)
-                    logging.info(f"[FFmpeg] scene {i+1} ok: {os.path.getsize(scene_vid)} bytes")
+                    print(f"[FFmpeg] scene {i+1} ok: {os.path.getsize(scene_vid)} bytes")
 
             if not scene_videos:
                 return {"error": "씬 영상 생성 실패"}
@@ -711,7 +711,7 @@ def run_media_pipeline(plan_id: int, content_type: str,
     """전체 미디어 파이프라인 실행"""
 
     keys = _resolve_api_keys(api_keys)
-    logging.info(f"[MediaPipeline] plan={plan_id} type={content_type} scenes={len(scenes)} "
+    print(f"[MediaPipeline] plan={plan_id} type={content_type} scenes={len(scenes)} "
                  f"image_provider={keys.get('image_provider')} "
                  f"has_elevenlabs={'yes' if keys.get('elevenlabs') else 'no'} "
                  f"has_together={'yes' if keys.get('together') else 'no'}")

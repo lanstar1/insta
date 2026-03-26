@@ -1100,14 +1100,16 @@ async function startMediaGen(planId) {
       body: { plan_id: planId, api_keys: apiKeys }
     });
 
+    console.log('[MediaGen] result:', JSON.stringify(result));
     if (result.status === 'ok') {
       showToast(`미디어 생성 완료! (${result.duration || 0}초)`, 'success');
     } else if (result.status === 'placeholder') {
       showToast('Placeholder로 생성됨 (API 키 미설정)', 'warn');
     } else {
-      showToast('생성 실패: ' + (result.error || ''), 'error');
+      showToast('생성 실패: ' + (result.error || JSON.stringify(result)), 'error');
     }
   } catch (e) {
+    console.error('[MediaGen] error:', e);
     showToast('오류: ' + e.message, 'error');
   }
 
