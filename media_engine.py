@@ -237,10 +237,23 @@ def _gen_image_together(prompt: str, output_path: str,
                 f.write(img_data)
             return {"status": "ok", "path": output_path, "engine": "flux_1.1_pro"}
         else:
-            return {"error": f"Together API: {resp.status_code}"}
+            logging.error(f"[Together] failed {resp.status_code}: {resp.text[:300]}")
+            return _gen_image_placeholder(prompt, output_path, width, height)
 
     except Exception as e:
-        return {"error": str(e)}
+        logging.error(f"[Together] exception: {e}")
+        return _gen_image_placeholder(prompt, output_path, width, height)
+
+
+def _dalle_size(width: int, height: int) -> str:
+    """DALL-E 3 지원 사이즈로 매핑 (1024x1024, 1024x1792, 1792x1024)"""
+    ratio = width / height
+    if ratio > 1.2:
+        return "1792x1024"   # 가로형
+    elif ratio < 0.8:
+        return "1024x1792"   # 세로형 (릴스/스토리)
+    else:
+        return "1024x1024"   # 정사각 (카드뉴스)
 
 
 def _gen_image_openai(prompt: str, output_path: str,
@@ -250,6 +263,9 @@ def _gen_image_openai(prompt: str, output_path: str,
     key = api_key or os.environ.get("OPENAI_API_KEY", "")
     if not key or not HAS_REQUESTS:
         return _gen_image_placeholder(prompt, output_path, width, height)
+
+    dalle_size = _dalle_size(width, height)
+    logging.info(f"[DALL-E] requested {width}x{height} → using {dalle_size}")
 
     try:
         resp = requests.post(
@@ -261,7 +277,7 @@ def _gen_image_openai(prompt: str, output_path: str,
             json={
                 "model": "dall-e-3",
                 "prompt": prompt,
-                "size": f"{width}x{height}",
+                "size": dalle_size,
                 "quality": "hd",
                 "n": 1,
                 "response_format": "b64_json"
@@ -275,12 +291,17 @@ def _gen_image_openai(prompt: str, output_path: str,
             img_data = base64.b64decode(data["data"][0]["b64_json"])
             with open(output_path, 'wb') as f:
                 f.write(img_data)
+            logging.info(f"[DALL-E] success: {os.path.getsize(output_path)} bytes")
             return {"status": "ok", "path": output_path, "engine": "dall-e-3"}
         else:
-            return {"error": f"OpenAI API: {resp.status_code}"}
+            err_detail = resp.text[:300] if resp.text else ""
+            logging.error(f"[DALL-E] failed {resp.status_code}: {err_detail}")
+            # API 실패 시 placeholder로 fallback
+            return _gen_image_placeholder(prompt, output_path, width, height)
 
     except Exception as e:
-        return {"error": str(e)}
+        logging.error(f"[DALL-E] exception: {e}")
+        return _gen_image_placeholder(prompt, output_path, width, height)
 
 
 def _gen_image_placeholder(prompt: str, output_path: str,
