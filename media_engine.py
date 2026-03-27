@@ -49,7 +49,7 @@ def _get_cjk_font():
 def _drawtext_font_opt():
     """drawtext 필터용 fontfile 옵션 문자열 반환"""
     fp = _get_cjk_font()
-    return f":fontfile='{fp}'" if fp else ""
+    return f":fontfile={fp}" if fp else ""
 
 
 def _escape_drawtext(text: str) -> str:
@@ -571,12 +571,12 @@ class ReelsCompositor:
                         fontsize = 40
                     else:
                         fontsize = 36
-                    # 반투명 박스 배경 + 흰색 텍스트 + 두꺼운 테두리로 가독성 확보
+                    # 흰색 텍스트 + 검정 테두리 (심플하게)
+                    font_opt = _drawtext_font_opt()
                     vf_parts.append(
                         f"drawtext=text='{text_clean}':fontsize={fontsize}:"
-                        f"fontcolor=white:borderw=3:bordercolor=0x000000@0.8:"
-                        f"box=1:boxcolor=0x000000@0.4:boxborderw=20:"
-                        f"x=(w-text_w)/2:y=(h-text_h)/2{_drawtext_font_opt()}"
+                        f"fontcolor=white:borderw=3:bordercolor=black:"
+                        f"x=(w-text_w)/2:y=(h-text_h)/2{font_opt}"
                     )
 
                 cmd += [
